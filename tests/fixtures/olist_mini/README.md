@@ -11,6 +11,9 @@ never committed). Each order covers one case the real data contains:
 | o_unavailable | unavailable after approval |
 | o_open | still shipped when the data was extracted (open) |
 | o_cancel_after_delivery | canceled although it has a delivery date (6 real orders) |
+| o_2016 | bought on 28 Dec 2016, delivered and reviewed in January 2017: the truth slice (orders from 2017-01-01) must drop all of its events |
 
 person_a places two orders with different addresses (o_delivered, o_open), like the 252 people
-whose address changes. These rows are test inputs only and never reach a lake or a metric.
+whose address changes. Two sellers and three products are included: p_2 has no category and no
+dimensions (610 and 2 real products), and p_3's category, pc_gamer, has no English translation.
+These rows are test inputs only and never reach a lake or a metric.

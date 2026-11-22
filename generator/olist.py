@@ -30,6 +30,8 @@ FILES = {
     "payments": "olist_order_payments_dataset.csv",
     "reviews": "olist_order_reviews_dataset.csv",
     "customers": "olist_customers_dataset.csv",
+    "sellers": "olist_sellers_dataset.csv",
+    "products": "olist_products_dataset.csv",
 }
 
 
@@ -122,17 +124,24 @@ def review_event(review: dict) -> dict:
     return make_event("review_submitted", [review["order_id"], review["review_id"]], t, t, payload)
 
 
-def build_events(olist_dir: Path) -> list[dict]:
-    """All events of the truth replay, in no particular order (the writer sorts them)."""
-    data = load(olist_dir)
+def build_events(data: dict[str, list[dict]], purchased_from: str | None = None) -> list[dict]:
+    """All events of the truth replay, in no particular order (the writer sorts them).
+
+    purchased_from keeps only orders purchased at or after that time, with their reviews. The
+    Phase 1 truth slice starts at the reliable window (docs/decisions.md), so no order from 2016
+    has later events landing inside the slice.
+    """
     customers = {c["customer_id"]: c for c in data["customers"]}
     items = group_by_order(data["items"], "order_item_id")
     payments = group_by_order(data["payments"], "payment_sequential")
 
-    events = []
+    events, kept = [], set()
     for order in data["orders"]:
+        if purchased_from is not None and order["order_purchase_timestamp"] < purchased_from:
+            continue  # same-format timestamps compare correctly as text
         oid = order["order_id"]
+        kept.add(oid)
         events.extend(order_events(order, customers[order["customer_id"]],
                                    items.get(oid, []), payments.get(oid, [])))
-    events.extend(review_event(r) for r in data["reviews"])
+    events.extend(review_event(r) for r in data["reviews"] if r["order_id"] in kept)
     return events

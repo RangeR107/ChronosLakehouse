@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from generator.landing import MARKER, write_day
-from generator.olist import build_events
+from generator.olist import build_events, load
 from generator.replay import replay
 
 MINI = Path(__file__).parent.parent / "fixtures" / "olist_mini"
@@ -19,7 +19,7 @@ MINI = Path(__file__).parent.parent / "fixtures" / "olist_mini"
 
 @pytest.fixture(scope="module")
 def events():
-    return build_events(MINI)
+    return build_events(load(MINI))
 
 
 def find(events, event_type, key):
@@ -30,13 +30,13 @@ def find(events, event_type, key):
 
 def test_event_counts_per_type(events):
     assert Counter(e["event_type"] for e in events) == {
-        "order_placed": 6,
-        "payment_approved": 5,       # o_never_approved has none
-        "handed_to_carrier": 4,      # o_delivered, o_undated, o_open, o_cancel_after_delivery
-        "delivered": 3,              # two dated, one undated
+        "order_placed": 7,
+        "payment_approved": 6,       # o_never_approved has none
+        "handed_to_carrier": 5,      # all but o_never_approved and o_unavailable
+        "delivered": 4,              # o_delivered, o_cancel_after_delivery, o_2016; o_undated undated
         "order_cancelled": 2,
         "order_unavailable": 1,
-        "review_submitted": 3,
+        "review_submitted": 4,
     }
 
 
@@ -104,8 +104,17 @@ def test_review_uses_answer_time_and_drops_free_text(events):
                                  "review_creation_date", "review_answer_timestamp"}
 
 
+def test_purchased_from_drops_older_orders_and_their_later_events():
+    # o_2016 was bought on 28 Dec 2016 but delivered and reviewed in January 2017: without the
+    # cut its January events would land inside a slice that never saw the order placed.
+    sliced = build_events(load(MINI), "2017-01-01 00:00:00")
+    assert not [e for e in sliced if e["logical_key"].startswith("o_2016")]
+    assert len(sliced) == 24
+
+
 def test_replay_writes_hourly_files_and_a_marker_per_date(tmp_path):
-    markers = replay(MINI, tmp_path, date(2017, 1, 5), date(2017, 1, 15))
+    markers = replay(MINI, tmp_path, date(2017, 1, 5), date(2017, 1, 15),
+                     purchased_from=date(2017, 1, 1))
     assert markers[0]["business_date"] == "2017-01-05"
     assert len(markers) == 11  # one per date, including empty ones
 
