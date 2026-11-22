@@ -341,3 +341,29 @@ before the phase that depends on it).
 - **Alternatives:** run them only locally (the rules could break unnoticed between local runs).
 - **Effect on the CI/local test split above:** PostgreSQL moves to "CI and locally"; only tests
   needing `data/raw/olist/` stay local.
+
+## 2026-11-22 · Bronze: replay-time ingestion, events before manifest, raw lines kept
+
+- **Status:** proposed
+- **ingested_at is replay time, not wall-clock time:** the run for business date D stamps
+  `D + 1 day 00:00:00`, just after the day closes on the replay clock. A retry then produces
+  identical rows (the idempotency test compares checksums), and "rebuild as known at time T"
+  means the same thing on every run. Alternative: the laptop's clock (every retry would differ).
+- **Times are TIMESTAMP_NTZ:** Olist's and the replay's timestamps carry no zone and must never
+  be converted. Spark 3.5's `TIMESTAMP_NTZ` is stored by Iceberg as `timestamp` (without zone),
+  so nothing shifts them; the session zone is also pinned to UTC as a second guard. Alternative:
+  `TIMESTAMP` (with local zone), where a Python datetime literal is silently shifted through the
+  machine's zone.
+- **Events are appended before the manifest:** two tables mean two commits. If a run dies
+  between them, the retry finds the file's lines already in bronze, skips them, and writes only
+  the missing manifest row. Manifest first could record a file as loaded that never was, losing
+  it for good. Each day's lines go in one append, which Iceberg commits atomically.
+- **Bronze keeps the raw line:** `raw` is the exact line received, with `source_file` and
+  `line_number`; only `event_id` and `event_type` are read out, for auditing. All typing happens
+  in silver, so a malformed line still reaches bronze and can be quarantined with its reason
+  instead of disappearing at ingestion.
+- **Only listed files load:** a file on disk that the marker doesn't list is reported as
+  "unlisted" and never loaded; a listed file that isn't there is reported as "missing". A file
+  whose checksum differs from the marker stops the run. Phase 3 turns these into the
+  completeness check's Warn and Block results.
+- **Local paths:** `lake/landing/` and `lake/warehouse/` stand in for S3 and are git-ignored.

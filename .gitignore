@@ -15,3 +15,5 @@ __pycache__/
 *.egg-info/
 # Airflow writes a default config here on first start; it is generated, not source.
 airflow_local/config/airflow.cfg
+# Local lake: landing files and the Iceberg warehouse (stand-ins for S3), always regenerated.
+lake/
