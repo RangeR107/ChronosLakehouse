@@ -1,0 +1,327 @@
+# Chronos metric definitions.
+#
+# Every dashboard number comes from one definition here, and dashboards read only the gold tables
+# that implement it. Source: docs/spec.md, "Business questions and metric definitions" (Revision 4).
+# The shared definitions come first, because most arguments about a metric are really arguments
+# about them.
+#
+# tools/measure_spec.py is the reference implementation of questions 1 to 7. Each metric names the
+# CSV it writes; the metric regression test compares gold with those files period by period and
+# slice by slice. Question 8 needs the replay's publication history, so only the pipeline makes it.
+#
+# expected_headline values were measured on the Kaggle download on 2026-11-22 with
+# measure_spec.py, over orders purchased in the reliable window. Gold must reproduce them.
+
+version: 1
+spec_revision: 4
+
+shared_definitions:
+  business_date:
+    definition: >-
+      The calendar date of the timestamp the metric is about, as recorded. Olist timestamps carry
+      no time zone: treat them as Brasilia local time and never convert them.
+
+  reliable_window:
+    definition: >-
+      Purchases from 1 Jan 2017 up to, not including, 1 Sep 2018. Late 2016 is sparse, and Sep and
+      Oct 2018 hold only 20 orders between them, so every metric counts only orders purchased
+      inside the window.
+    purchase_from: "2017-01-01T00:00:00"   # inclusive
+    purchase_before: "2018-09-01T00:00:00" # exclusive
+
+  person:
+    definition: >-
+      customer_unique_id identifies a person. customer_id is issued per order, so it never
+      identifies a person.
+
+  delivered_order:
+    definition: >-
+      order_status = 'delivered' and order_delivered_customer_date is present. The 8 delivered
+      orders without a delivery date are flagged and left out of delivery metrics.
+
+  final_status:
+    definition: >-
+      delivered, canceled or unavailable. Orders in any other status when the data was extracted
+      are open (1,729 in the whole dataset) and are left out of any denominator that needs an
+      outcome.
+    final: [delivered, canceled, unavailable]
+    open: [shipped, invoiced, processing, created, approved]
+
+  qualifying_purchase:
+    definition: >-
+      An order whose status is not canceled or unavailable. Open orders count, because the
+      customer did buy. A deliberate choice, used by question 5.
+    excluded_statuses: [canceled, unavailable]
+
+  merchandise_revenue:
+    definition: >-
+      Sum of item prices in Brazilian reais (BRL) for orders whose status is not canceled or
+      unavailable, by purchase date. Freight is reported separately. Payment values are used only
+      to reconcile payments against items.
+    currency: BRL
+    excluded_statuses: [canceled, unavailable]
+
+  region:
+    definition: >-
+      IBGE major region of a location: the order's delivery address for customer metrics, the
+      seller's address for seller metrics. Regional metrics join through the fact's
+      delivery_geography_key or seller_geography_key, never through dim_customer or dim_seller.
+    ibge_regions:
+      North: [AC, AP, AM, PA, RO, RR, TO]
+      Northeast: [AL, BA, CE, MA, PB, PE, PI, RN, SE]
+      Central-West: [DF, GO, MT, MS]
+      Southeast: [ES, MG, RJ, SP]
+      South: [PR, RS, SC]
+
+  order_review_score:
+    definition: >-
+      The score of the order's review. When an order has several reviews, take the latest by
+      review_creation_date, then by review_answer_timestamp, then the highest review_id. The
+      tie-breakers matter: creation dates have no time of day, and 156 of the 547 orders with
+      several reviews tie on the latest one (Kaggle download).
+    order_by_desc: [review_creation_date, review_answer_timestamp, review_id]
+
+metrics:
+  - id: q1_late_delivery_rate
+    number: 1
+    question: Where are deliveries late?
+    population: Delivered orders purchased in the reliable window.
+    definition: >-
+      An order is late when its delivery date is after its estimated delivery date, compared by
+      calendar day because the estimate has no time of day.
+    measures:
+      late_rate:
+        numerator: late delivered orders
+        denominator: delivered orders
+    period_type: month
+    period_basis: delivery date (order_delivered_customer_date)
+    slices: [all, region]          # region = delivery region
+    excludes: [delivered orders without a delivery date (flag)]
+    built_from: [fact_order_fulfillment, dim_geography (delivery role), dim_date]
+    dirty_period: >-
+      A changed order dirties its delivery month; recompute that month for every region and the
+      all slice.
+    reference_output: q1_q2_delivery_by_month_region.csv
+    expected_headline: {late_orders: 6531, delivered_orders: 96203, late_rate: 0.0679}
+
+  - id: q2_delivery_promise
+    number: 2
+    question: How cautious are delivery promises?
+    population: Delivered orders purchased in the reliable window.
+    definition: >-
+      Days early = estimated delivery date minus delivery date, in calendar days (negative means
+      late).
+    measures:
+      median_days_early: {statistic: median}
+      p10_days_early: {statistic: 10th percentile}
+      p90_days_early: {statistic: 90th percentile}
+      share_7_days_early:
+        numerator: delivered orders with days early >= 7
+        denominator: delivered orders
+    period_type: month
+    period_basis: delivery date
+    slices: [all, region]
+    excludes: [delivered orders without a delivery date (flag)]
+    built_from: [fact_order_fulfillment, dim_geography (delivery role), dim_date]
+    dirty_period: Same as question 1.
+    reference_output: q1_q2_delivery_by_month_region.csv
+    expected_headline: {median_days_early: 12, share_7_days_early: 0.789}
+
+  - id: q3_seller_handover
+    number: 3
+    question: Which sellers consistently hand over late?
+    population: >-
+      Items of single-seller orders purchased in the reliable window that have a carrier handover
+      time. Only single-seller orders count, because the handover time is recorded per order.
+    definition: >-
+      An item is handed over late when its order's carrier handover time
+      (order_delivered_carrier_date) is after the item's shipping limit time, compared as
+      timestamps.
+    measures:
+      late_rate:
+        numerator: items handed over late
+        denominator: items
+        grain: seller x shipping-limit month
+        minimum: a seller needs at least 20 items in the month
+      percent_rank:
+        rule: >-
+          In each month with at least 20 eligible sellers, PERCENT_RANK on late_rate, lowest
+          first; ties share a rank ((rank - 1) / (n - 1), rank by the lowest position).
+      worst_decile:
+        rule: percent_rank >= 0.9
+      classification:
+        values: [not_enough_history, consistently_late, ok]
+        rule: >-
+          Evaluated every ranked month. consistently_late when the seller is in the worst decile
+          in at least 3 of their last 6 ranked months. A seller needs 6 ranked months before
+          being classified; until then they show as not_enough_history.
+    period_type: month
+    period_basis: shipping limit date (shipping_limit_date)
+    slices: [seller]
+    excludes:
+      - multi-seller orders
+      - orders handed to the carrier before purchase (flag)
+    built_from: [fact_order_items, fact_order_fulfillment, dim_seller]
+    dirty_period: >-
+      A changed order dirties the shipping-limit month of each of its items; recompute that
+      month's late rates and ranks for every eligible seller, then the classifications for that
+      month and the following 5 ranked months.
+    reference_output: q3_seller_months.csv
+    expected_headline:
+      late_items: 10129
+      items: 107864
+      late_rate: 0.0939
+      ranked_months: 18
+      sellers_ever_consistently_late: 9
+
+  - id: q4_late_vs_satisfaction
+    number: 4
+    question: Does late delivery go with lower satisfaction?
+    population: Delivered orders purchased in the reliable window that have an order review.
+    definition: >-
+      Average order review score and share of 1-star reviews, late versus on-time delivered
+      orders (late as in question 1). Observational: report the association, never a cause.
+    measures:
+      mean_score: {statistic: mean of order review score}
+      one_star_share:
+        numerator: orders whose order review score is 1
+        denominator: reviewed delivered orders
+    period_type: month
+    period_basis: delivery date
+    slices: [delivery_group]       # late, on_time
+    excludes: [delivered orders without a delivery date (flag)]
+    built_from: [fact_order_fulfillment, fact_reviews]
+    dirty_period: >-
+      A changed order, or a changed review, dirties its delivery month; recompute that month's
+      late and on-time groups.
+    reference_output: q4_satisfaction_by_month.csv
+    expected_headline:
+      late: {orders: 6378, mean_score: 2.27, one_star_share: 0.538}
+      on_time: {orders: 89182, mean_score: 4.29, one_star_share: 0.066}
+
+  - id: q5_retention
+    number: 5
+    question: Do customers come back?
+    population: >-
+      People whose first qualifying purchase is inside the reliable window. People who first
+      bought in 2016 are existing customers and belong to no cohort.
+    definition: >-
+      A cohort is the month of a person's first qualifying purchase. A repeat within N days is
+      another qualifying purchase with a later purchase time, no more than N days after the
+      first; orders placed in the same second are one basket, so they are not a repeat. Only
+      people whose first purchase time plus N days is no later than 1 Sep 2018 00:00 count in the
+      denominator; later cohorts are shown as incomplete, not as zero.
+    measures:
+      rate_90:
+        numerator: eligible people with a repeat within 90 days
+        denominator: people whose first purchase + 90 days <= 2018-09-01 00:00
+      rate_180:
+        numerator: eligible people with a repeat within 180 days
+        denominator: people whose first purchase + 180 days <= 2018-09-01 00:00
+    period_type: cohort_month
+    period_basis: first qualifying purchase
+    slices: [all]
+    built_from: [fact_order_fulfillment, dim_customer, dim_date]
+    dirty_period: >-
+      A changed order dirties the cohort month of its person. A late order can change which order
+      is a person's first, so the cohort is derived again, and both the old and the new cohort
+      month are dirty.
+    reference_output: q5_retention_by_cohort.csv
+    expected_headline:
+      rate_90: {repeat: 1561, eligible: 76869, rate: 0.0203}
+      rate_180: {repeat: 1628, eligible: 57282, rate: 0.0284}
+      existing_customers_excluded: 293
+
+  - id: q6_approved_then_cancelled
+    number: 6
+    question: How many approved orders end cancelled?
+    population: >-
+      Orders purchased in the reliable window with a payment approval (order_approved_at
+      present) and a final status.
+    definition: >-
+      Orders with a payment approval and final status canceled, divided by orders with a payment
+      approval and any final status. Unavailable orders are reported beside it. The data says that
+      an approved order was cancelled, not when, so the metric makes no claim about timing.
+    measures:
+      canceled_rate:
+        numerator: approved orders with final status canceled
+        denominator: approved orders with a final status
+      unavailable_rate:
+        numerator: approved orders with final status unavailable
+        denominator: approved orders with a final status
+    period_type: month
+    period_basis: purchase date
+    slices: [all]
+    excludes:
+      - open orders (no final status)
+      - delivered orders that were never approved (flag)
+    built_from: [fact_order_fulfillment]
+    dirty_period: A changed order dirties its purchase month.
+    reference_output: q6_cancellations_by_month.csv
+    expected_headline: {canceled: 464, unavailable: 602, approved_final: 97263, open_left_out: 1694}
+
+  - id: q7_category_revenue_vs_satisfaction
+    number: 7
+    question: Which categories earn well but satisfy poorly?
+    population: >-
+      Orders purchased in the reliable window whose status is not canceled or unavailable.
+      Revenue uses every such order. Satisfaction uses only orders whose items all share one
+      category, because a review belongs to the order, not to an item.
+    definition: >-
+      Per category and purchase quarter: merchandise revenue, and the low-score share (1- and
+      2-star order reviews divided by reviewed orders) over single-category orders. Top 20% by
+      revenue means CUME_DIST <= 0.2 when every category with revenue that quarter is sorted by
+      revenue, highest first. Review statistics are joined only after ranking, and a category with
+      no reviewed orders can't be flagged. Flag a top-revenue category when the lower bound of the
+      95% Wilson interval of its low-score share is above that quarter's all-category share, so a
+      small sample can't trigger a flag on its own. Show each flagged category's late-delivery
+      rate beside it.
+    measures:
+      revenue: {rule: merchandise_revenue per category}
+      cume_dist: {rule: "CUME_DIST over revenue, highest first; tied categories all get the larger share, as SQL CUME_DIST does"}
+      low_share:
+        numerator: single-category reviewed orders with order review score 1 or 2
+        denominator: single-category reviewed orders
+      all_category_low_share:
+        numerator: all single-category reviewed orders in the quarter with score 1 or 2
+        denominator: all single-category reviewed orders in the quarter
+      wilson_lower: {rule: "lower bound of the 95% Wilson interval (z = 1.96) of low_share"}
+      flag: {rule: "cume_dist <= 0.2 and reviewed_orders > 0 and wilson_lower > all_category_low_share"}
+      delivered_orders:
+        rule: >-
+          single-category orders purchased in the quarter, delivered with a delivery date
+      late_rate:
+        numerator: those delivered orders late by calendar day, as in question 1
+        denominator: delivered_orders
+        notes: shown beside each flagged category; empty when delivered_orders is 0
+    period_type: quarter
+    period_basis: purchase date
+    slices: [category]             # products without a category are grouped as "unknown"
+    notes: The window's last quarter, 2018 Q3, holds only July and August.
+    built_from: [fact_order_items, fact_reviews, fact_order_fulfillment, dim_product]
+    dirty_period: >-
+      A changed order, or a changed review, dirties its purchase quarter; recompute that
+      quarter's revenue, ranks, all-category share and flags for every category.
+    reference_output: q7_category_by_quarter.csv
+    expected_headline:
+      whole_window_top_20pct_categories: 14
+      whole_window_categories_with_revenue: 74
+
+  - id: q8_restatements
+    number: 8
+    question: How much did published numbers change?
+    population: Every value published to fact_daily_metrics_published.
+    definition: >-
+      Restatement = latest published value minus first published value, per metric, reporting
+      period and slice, shown with numerator and denominator. It describes this pipeline under
+      simulated arrival, not Olist's business, and is labelled as a pipeline metric.
+    measures:
+      restatement:
+        rule: latest published value - first published value
+        key: [metric_id, period_type, period_start, slice_type, slice_value]
+    period_type: the period type of the restated metric
+    slices: the slices of the restated metric
+    provenance: simulated            # depends on simulated arrival times
+    built_from: [fact_daily_metrics_published]
+    dirty_period: Nothing directly; follows from the rows the other metrics republish.
+    reference_output: null           # only the pipeline can produce it

@@ -16,6 +16,8 @@ Definitions (see "Business questions and metric definitions" in the spec):
 - Order review: the latest review by creation date, then answer time, then review_id.
 - CUME_DIST: rank(method="max", pct=True) on revenue, highest first, over every category with revenue.
 - PERCENT_RANK: (rank(method="min") - 1) / (n - 1), on late rate, lowest first.
+- Q7 late rate beside each category: single-category orders purchased in the quarter, delivered
+  with a delivery date, late by calendar day (delivered_orders, late_rate in the Q7 CSV).
 """
 import os
 import sys
@@ -198,8 +200,11 @@ def main(d, out):
     single = items[items.order_id.isin(ncat[ncat == 1].index)].groupby(["order_id", "quarter"]).cat.first().reset_index()
     rated = single.merge(orev, on="order_id")
     rated["low"] = rated.review_score <= 2
+    # The late-delivery rate shown beside each category: the same single-category orders, delivered
+    # with a delivery date, late by calendar day as in question 1.
+    delivered = single.merge(od[["order_id", "late"]], on="order_id")
 
-    def category_table(item_rows, rated_rows):
+    def category_table(item_rows, rated_rows, delivered_rows):
         t = item_rows.groupby("cat").price.sum().rename("revenue").to_frame()
         t["cume_dist"] = t.revenue.rank(method="max", pct=True, ascending=False)
         t["top_20pct"] = t.cume_dist <= 0.2
@@ -211,18 +216,22 @@ def main(d, out):
         t["all_category_low_share"] = overall
         t["wilson_lower"] = np.where(t.reviewed_orders > 0, wilson_lower(t.low_share, t.reviewed_orders.clip(lower=1)), np.nan)
         t["flag"] = t.top_20pct & (t.reviewed_orders > 0) & (t.wilson_lower > overall)
+        d = delivered_rows.groupby("cat").agg(delivered_orders=("late", "size"), late_rate=("late", "mean"))
+        t = t.join(d, how="left")
+        t["delivered_orders"] = t.delivered_orders.fillna(0).astype(int)
         return t.reset_index().rename(columns={"index": "cat"}), overall
 
     parts = []
     print("== Q7 (window's last quarter, 2018Q3, holds only July and August)")
     for q in sorted(items.quarter.unique()):
-        t, overall = category_table(items[items.quarter == q], rated[rated.quarter == q])
+        t, overall = category_table(items[items.quarter == q], rated[rated.quarter == q],
+                                    delivered[delivered.quarter == q])
         parts.append(t.assign(quarter=q))
-        names = sorted(t[t.flag].cat)
+        names = [f"{r.cat} (late {r.late_rate * 100:.1f}%)" for r in t[t.flag].sort_values("cat").itertuples()]
         print(f"  {q}: {len(t)} categories, {int(t.top_20pct.sum())} in top 20%, all-category low share"
               f" {overall * 100:.1f}%, flagged {len(names)}: {', '.join(names) if names else '-'}")
     save(pd.concat(parts), out, "q7_category_by_quarter.csv")
-    t, overall = category_table(items, rated)
+    t, overall = category_table(items, rated, delivered)
     top = t[t.top_20pct]
     print(f"whole window: {len(top)} of {len(t)} categories in top 20%; mean score {top.mean_score.min():.2f} to"
           f" {top.mean_score.max():.2f}; low share {top.low_share.min() * 100:.1f}% to {top.low_share.max() * 100:.1f}%;"

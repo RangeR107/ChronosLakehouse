@@ -6,7 +6,7 @@ Data Engineer intern interviews: the owner must be able to explain and defend ev
 
 ## Sources of truth
 
-- `docs/spec.md` is the specification (Revision 4). Read the relevant section before building
+- `docs/spec.md` is the specification (Revision 5). Read the relevant section before building
   anything. Its Decision log and Known limitations explain why things are the way they are.
 - `tools/measure_spec.py` is the reference implementation of metrics 1 to 7. Its CSV output is
   what the metric regression test compares gold with. `tools/profile_olist.py` profiles the raw files.
@@ -20,20 +20,33 @@ why, alternatives) and point out which spec section needs updating.
 
 - Build one phase at a time, in order (spec: "Phased build plan"). Finish a phase's "Done when"
   criteria, with tests passing, before starting the next. Stop at the end of each phase and wait.
-- Everything runs locally until Phase 4. Don't create AWS resources, write Terraform that gets
-  applied, or ask for AWS credentials before then.
+- The project must cost nothing. Everything runs locally until Phase 4, which uses an AWS
+  free-plan account only (S3, Glue, Glue Data Catalog, and Athena if the free plan allows it).
+  Never propose a paid service, a paid plan upgrade, or anything that could bill the owner.
+  Don't create AWS resources, apply Terraform, or ask for AWS credentials before Phase 4.
+- Dashboards are served from PostgreSQL, not Redshift (see "Zero cost" in the spec).
 - Work in small steps with one commit each. Commit messages say what changed and why.
 - Ask before adding any dependency, service or tool that the spec doesn't name. In particular:
-  no EMR, Kinesis, OpenSearch, dbt or MWAA.
+  no EMR, Kinesis, OpenSearch, dbt, MWAA or Redshift.
 - At the end of each phase, write `docs/phase-N-notes.md`: what was built, how to run it, how to
   test it, and the questions an interviewer could ask about it, with short answers that point
   to the code. Write for someone learning data engineering, in plain language.
 - Comments explain why, not what. Prefer small, readable functions over clever ones.
 
+## Environment (macOS, Apple Silicon)
+
+- Use the project's virtual environment for every Python command: `.venv/bin/python`,
+  `.venv/bin/pip`, `.venv/bin/pytest`. Create it with `python3.11 -m venv .venv` if it's missing.
+- Spark needs Java 17; Java 23 is also installed and must not be used. Before running anything
+  that starts Spark, check `java -version`. If it isn't 17, prefix the command with
+  `JAVA_HOME=$(/usr/libexec/java_home -v 17)`.
+- Docker Desktop runs PostgreSQL and Airflow. If a docker command fails, ask the owner to
+  start Docker Desktop rather than working around it.
+
 ## Pinned versions
 
 Python 3.11 · PySpark 3.5.6 · iceberg-spark-runtime-3.5_2.12:1.10.0 · Java 17 · Airflow 3.4.0
-installed with its constraints file (and the Amazon provider pinned with it) · PostgreSQL in
+installed with its constraints file (and the Amazon provider pinned with it) · PostgreSQL 16 in
 Docker. Every Iceberg table is created with format-version 2. Glue 5.1 later, pinned explicitly.
 
 ## Rules from the spec that are easy to break
