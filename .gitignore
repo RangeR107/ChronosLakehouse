@@ -10,3 +10,8 @@ __pycache__/
 *.parquet
 .env
 .DS_Store
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+# Airflow writes a default config here on first start; it is generated, not source.
+airflow_local/config/airflow.cfg

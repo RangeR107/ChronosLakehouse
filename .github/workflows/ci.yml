@@ -1,0 +1,31 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # Same versions as Glue 5.1 and the local setup: Python 3.11, Java 17 for Spark 3.5.
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check .
+
+      # The Iceberg smoke test downloads the iceberg-spark-runtime jar from Maven Central on
+      # first use, so this step needs network access.
+      - name: Test
+        run: pytest

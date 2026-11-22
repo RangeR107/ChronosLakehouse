@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chronos"
+version = "0.0.1"
+description = "Batch lakehouse that replays Olist orders as a late, messy event feed and publishes only audited releases."
+# Python 3.11 matches AWS Glue 5.1, so code tested here runs there unchanged.
+requires-python = ">=3.11,<3.12"
+# Exact pins: the spec pins PySpark to Glue 5.1's Spark 3.5.6.
+dependencies = [
+    "pyspark==3.5.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.2.0",
+    "ruff==0.17.6",
+]
+# Only for the reference scripts in tools/, at the versions their numbers were measured with.
+# Kept out of the core dependencies so pipeline code can't come to rely on pandas by accident.
+tools = [
+    "pandas==3.1.1",
+    "numpy==2.4.6",
+]
+
+[tool.setuptools.packages.find]
+# Only the pipeline's own code is a package. tests/ and tools/ are run in place, and dags/ is
+# loaded by Airflow from its folder, not imported.
+include = ["generator*", "jobs*", "sentinel*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+# tools/ holds the reference scripts whose output the spec quotes. They are kept exactly as they
+# were measured with, so lint changes can't alter a reference number.
+extend-exclude = ["tools"]
