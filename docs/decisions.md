@@ -390,3 +390,49 @@ before the phase that depends on it).
 - **Alternatives:** an unbounded extract (leaks future rows in a replay); storing the mark in a
   table of its own (one more thing to keep consistent); appending re-read rows and leaving
   deduplication to silver (bronze grows with copies, and a retry is no longer a no-op).
+
+## 2026-11-22 · Silver: contract-driven checks, insert-only MERGEs, events written last
+
+- **Status:** proposed
+- **What a run reads:** bronze lines ingested after the latest `ingested_at` in `silver.events`,
+  up to the run's replay time. Phase 1 has no releases, so this stands in for the spec's
+  "last published watermark"; Phase 3 swaps in the release manifest's watermark. A run after a
+  gap catches up on every day it missed.
+- **Checks come from the contract:** `jobs/contract.py` reads `contracts/events_v1.json` and
+  builds the parsing schema and every check from it: invalid JSON, unknown schema version or
+  event type, missing required field, a value that can't be read as its type (array elements
+  included). A failing line goes to `silver.quarantine` with all its reasons, e.g.
+  `["missing:customer_id"]`. This is the spec's schema-contract check; its Block threshold
+  (0.5% of a day's events) comes with DataSentinel in Phase 3.
+- **Typed silver tables:** `silver.events` (every accepted event version, with its three clocks),
+  `silver.orders`, `silver.order_items`, `silver.order_payments` (from order_placed) and
+  `silver.reviews`. Milestone times stay in `silver.events.event_time`.
+- **Deduplication before every MERGE:** within the batch the first copy of each event_id received
+  is kept; against silver an anti-join drops what is already there. The MERGEs are insert-only,
+  because an event_id names one immutable event version; a correction is a new version with its
+  own event_id (Phase 2).
+- **Order of writes:** order tables and quarantine first, `silver.events` last in one commit. The
+  read mark comes from `silver.events` alone, so a crash midway makes the retry read the batch
+  again, and the insert-only MERGEs fill in only what is missing.
+- **Alternatives:** read `ingested_at = run time` exactly (a skipped day would never be read);
+  a mark from events and quarantine together (a crash between the two writes could skip
+  events); MERGE with WHEN MATCHED UPDATE (nothing should ever change an event version).
+
+## 2026-11-22 · Payments with 0 installments or type not_defined are flagged, not quarantined
+
+- **Status:** agreed (owner, 22 Nov 2026: option 1)
+- **Finding:** the spec's DataSentinel check "Valid values" quarantines rows with fewer than 1
+  installment or an unknown payment type. The Kaggle data has 2 credit-card payments with 0
+  installments (on delivered orders, 2018-04-22 and 2018-05-15) and 3 payments of type
+  `not_defined` with value 0.00 (on canceled orders, Aug and Sep 2018). The Real defects table
+  lists neither. Quarantined, they would be missing from fact_payments and the truth test would
+  fail against Olist. None fall in the Phase 1 slice.
+- **Decision:** both become Real defects with severity **Flag**: the rows stay, `dq_flags`
+  marks them, and only a day whose rate jumps far above the baseline blocks a run. It is how the
+  spec already treats the 9 zero-value payments, and the truth test stays an exact comparison
+  with what Olist recorded. The valid-values check still quarantines anything else outside its
+  rules (price not above 0, review score outside 1 to 5, a payment type Olist never uses).
+- **Alternative rejected:** quarantine them and have the truth test's reference build drop them
+  too (the truth test would no longer compare with what Olist recorded).
+- **Spec sections changed:** Data sources (Real defects table: two new rows); DataSentinel
+  (Checks: Valid values names the two flagged exceptions).

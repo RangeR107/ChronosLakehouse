@@ -160,6 +160,8 @@ The base is the Brazilian E-Commerce Public Dataset by Olist: about 100,000 real
 | Products with no category | 610 | Flag | Grouped as "unknown" |
 | Categories with no English translation | 2 (pc\_gamer, portateis\_cozinha\_e\_preparadores\_de\_alimentos) | Warn once | Keep the Portuguese name |
 | Payment rows with value 0 | 9 | Flag | None on revenue |
+| Payment rows with 0 installments | 2 (credit card, delivered orders) | Flag | None |
+| Payment type not\_defined | 3 (value 0.00, canceled orders) | Flag | None on revenue |
 
 **Region mapping.** Brazil's statistics institute (IBGE) groups the states into five major regions: North, Northeast, Southeast, South and Central-West ([IBGE](https://biblioteca.ibge.gov.br/visualizacao/periodicos/2/bn_2022_v30_art02.pdf)). dim\_geography takes region from that mapping.
 
@@ -424,7 +426,7 @@ DataSentinel decides whether a run becomes a release. It is the audit step of th
 | Schema contract | Events entering silver | Expected fields and types per known schema\_version | Quarantine events with an unknown version or a missing required field; Block if they exceed 0.5% of the day's events; Warn on a new optional field |
 | Completeness and keys | Silver and gold | GX not-null and uniqueness expectations on each table's grain | Block |
 | Referential integrity | Gold facts | Every dimension key exists; inferred members count as present | Block |
-| Valid values | Silver | Price above 0, review score 1 to 5, installments at least 1, known payment types | Quarantine rows; Block above 0.5% of the day's rows |
+| Valid values | Silver | Price above 0, review score 1 to 5, installments at least 1, known payment types. The real Olist rows with 0 installments or type not\_defined are flagged as known source defects instead (see Data sources) | Quarantine rows; Block above 0.5% of the day's rows |
 | Known source defects | Silver | The defect rules in Data sources | Flag rows; Block when a day's rate scores above 3.5 against its baseline |
 | Reconciliation | Silver to gold | Order counts and revenue per business date match exactly, once flagged and quarantined rows are accounted for | Block |
 | Volume | Each ingest day | Modified z-score against the same weekday over the previous 8 weeks (details below) | Block; Warn on known sale days |
