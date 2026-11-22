@@ -1,0 +1,7 @@
+"customer_id","customer_unique_id","customer_zip_code_prefix","customer_city","customer_state"
+c_1,person_a,01310,sao paulo,SP
+c_2,person_b,20040,rio de janeiro,RJ
+c_3,person_c,30130,belo horizonte,MG
+c_4,person_d,40020,salvador,BA
+c_5,person_a,80010,curitiba,PR
+c_6,person_e,69005,manaus,AM

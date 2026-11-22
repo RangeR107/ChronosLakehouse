@@ -1,0 +1,7 @@
+"order_id","customer_id","order_status","order_purchase_timestamp","order_approved_at","order_delivered_carrier_date","order_delivered_customer_date","order_estimated_delivery_date"
+o_delivered,c_1,delivered,2017-01-05 10:15:00,2017-01-05 10:30:00,2017-01-06 14:00:00,2017-01-12 09:05:00,2017-01-20 00:00:00
+o_undated,c_2,delivered,2017-01-05 23:40:00,2017-01-06 00:10:00,2017-01-07 08:00:00,,2017-01-25 00:00:00
+o_never_approved,c_3,canceled,2017-01-06 12:00:00,,,,2017-01-28 00:00:00
+o_unavailable,c_4,unavailable,2017-01-06 13:00:00,2017-01-06 13:20:00,,,2017-01-27 00:00:00
+o_open,c_5,shipped,2017-01-07 09:00:00,2017-01-07 09:30:00,2017-01-08 10:00:00,,2017-01-30 00:00:00
+o_cancel_after_delivery,c_6,canceled,2017-01-07 18:00:00,2017-01-07 18:05:00,2017-01-08 11:00:00,2017-01-10 16:00:00,2017-01-21 00:00:00

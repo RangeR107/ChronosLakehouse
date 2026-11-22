@@ -1,0 +1,8 @@
+"order_id","payment_sequential","payment_type","payment_installments","payment_value"
+o_delivered,2,voucher,1,20.00
+o_delivered,1,credit_card,3,62.19
+o_undated,1,boleto,1,135.60
+o_never_approved,1,credit_card,1,49.90
+o_unavailable,1,credit_card,2,75.00
+o_open,1,debit_card,1,43.72
+o_cancel_after_delivery,1,credit_card,1,119.99
