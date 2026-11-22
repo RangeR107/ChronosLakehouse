@@ -18,11 +18,20 @@ from jobs.land_to_bronze import (
     LandingNotReady,
     land_to_bronze,
     register_files,
+    wait_for_landing,
 )
-from jobs.run_day import run_day
 
 MINI = Path(__file__).parent.parent / "fixtures" / "olist_mini"
 JAN5, JAN15 = date(2017, 1, 5), date(2017, 1, 15)
+
+
+def run_day(ctx, day):
+    """The bronze part of jobs.run_day, without the PostgreSQL extract these tests don't need."""
+    wait_for_landing(ctx, day)
+    registered = register_files(ctx, day)
+    landed = land_to_bronze(ctx, day, registered["new"])
+    return {"business_date": day.isoformat(), "files": len(registered["new"]), "events": landed,
+            "missing": registered["missing"], "unlisted": registered["unlisted"]}
 
 
 @pytest.fixture

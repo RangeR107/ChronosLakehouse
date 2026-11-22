@@ -12,6 +12,8 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from jobs.context import Context
+from jobs.db import conninfo
+from jobs.extract_dimensions import extract_dimensions
 from jobs.land_to_bronze import land_to_bronze, register_files, wait_for_landing
 from jobs.spark import build_session
 
@@ -19,10 +21,11 @@ from jobs.spark import build_session
 def run_day(ctx: Context, business_date: date) -> dict:
     wait_for_landing(ctx, business_date)
     registered = register_files(ctx, business_date)
+    extracted = extract_dimensions(ctx, business_date)
     landed = land_to_bronze(ctx, business_date, registered["new"])
     return {"business_date": business_date.isoformat(), "files": len(registered["new"]),
             "events": landed, "missing": registered["missing"],
-            "unlisted": registered["unlisted"]}
+            "unlisted": registered["unlisted"], "extracted": extracted}
 
 
 def main(argv=None):
@@ -33,7 +36,8 @@ def main(argv=None):
     p.add_argument("--warehouse", type=Path, default=Path("lake/warehouse"))
     a = p.parse_args(argv)
 
-    ctx = Context(build_session(str(a.warehouse.resolve())), a.landing)
+    ctx = Context(build_session(str(a.warehouse.resolve())), a.landing,
+                  source_conninfo=conninfo())
     d = a.start
     while d <= a.end:
         print(run_day(ctx, d))

@@ -18,6 +18,8 @@ class Context:
     landing_dir: Path
     # Prefix for namespaces, so tests can give each test its own tables in one warehouse.
     namespace_prefix: str = ""
+    # Where extract_dimensions reads the source master (jobs/db.py builds the default).
+    source_conninfo: str = ""
 
     def table(self, layer: str, name: str) -> str:
         return f"{CATALOG}.{self.namespace_prefix}{layer}.{name}"

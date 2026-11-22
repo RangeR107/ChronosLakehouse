@@ -367,3 +367,26 @@ before the phase that depends on it).
   whose checksum differs from the marker stops the run. Phase 3 turns these into the
   completeness check's Warn and Block results.
 - **Local paths:** `lake/landing/` and `lake/warehouse/` stand in for S3 and are git-ignored.
+
+## 2026-11-22 · extract_dimensions: upper bound at replay time, mark derived from bronze
+
+- **Status:** proposed
+- **Upper bound:** besides the spec's lower bound (updated_at later than the high-water mark
+  minus one day), the extract reads only rows with updated_at earlier than the run's replay
+  time (`D + 1 day 00:00:00`). The generator can run ahead of the pipeline, so without the bound
+  day 1's extract would see rows written on day 60 and the replay would leak the future. In
+  production the bound is simply "now".
+- **The high-water mark is derived, not stored:** it is the latest updated_at already in the
+  bronze extract table, so there is no separate state to get out of step with the data, and a
+  failed run can't advance it.
+- **Re-read rows are skipped:** the one-day overlap re-reads rows on purpose. Rows whose
+  (natural key, updated_at) bronze already holds are not appended again, so a retry appends
+  nothing and bronze keeps one row per state of each master row.
+- **Values travel as text:** PostgreSQL returns every column as text and Spark casts it, so no
+  driver-side conversion (time zones included) can change a value; zip prefixes stay codes with
+  their leading zeros.
+- **Tables:** `bronze.customers_extract`, `bronze.sellers_extract`, `bronze.products_extract`,
+  each with `extracted_at` (replay time) and `run_id`.
+- **Alternatives:** an unbounded extract (leaks future rows in a replay); storing the mark in a
+  table of its own (one more thing to keep consistent); appending re-read rows and leaving
+  deduplication to silver (bronze grows with copies, and a retry is no longer a no-op).
