@@ -263,3 +263,81 @@ before the phase that depends on it).
   date). This is a real source defect that the Real defects table doesn't list. Proposal: add it
   as a Flag, kept in the reviews fact and left out of nothing, since no metric uses review timing.
 - **Spec sections:** Shared definitions (Order review score); Data sources (Real defects table).
+
+## 2026-11-22 · PostgreSQL driver: psycopg 3
+
+- **Status:** agreed (owner, 22 Nov 2026)
+- **What:** psycopg 3, pinned exactly, is the one PostgreSQL driver. The generator uses it to
+  write the source master; extract_dimensions uses it to read changed rows and hands them to
+  Spark.
+- **Version:** `psycopg[binary]==3.3.6`, the version Airflow 3.4.0's constraints install in its
+  image (checked inside the running container), not the newest 3.3.9. The Phase 2 Airflow image
+  then has one copy, not two that disagree. The binary extra bundles libpq, so neither the laptop
+  nor CI needs PostgreSQL's client library installed.
+- **Why:** one dependency covers both writing and reading; Airflow's image already ships it.
+- **Alternatives:** Spark's PostgreSQL JDBC driver for the extract (the generator would still
+  need a Python driver, so two drivers); both.
+
+## 2026-11-22 · The Phase 1 truth slice: Jan and Feb 2017 orders, truth as of day 60
+
+- **Status:** agreed (owner, 22 Nov 2026)
+- **What:** the slice replays only orders purchased from 2017-01-01, the start of the reliable
+  window, for 60 business dates (2017-01-01 to 2017-03-01). Truth is Olist as known at the end of
+  day 60: an event counts if it was emitted by then. The DuckDB reference build applies that cut
+  itself, from the Olist files and the spec's written emission rule, never with pipeline code.
+- **Why:** about 2,600 orders, so the business tables and metrics hold real data, while the
+  test stays fast. Starting at the window avoids orders from 2016 whose later events would land
+  inside the slice.
+- **Alternatives:** the first 60 feed days from 2016-09-04 (about 330 orders, all outside the
+  reliable window, so metrics would be empty); the full 786-day replay only (strongest, slowest;
+  still run before tagged versions).
+- **Spec section:** Testing and evaluation ("CI runs all three on a 60-day slice") should name
+  this slice and its cut-off rule.
+
+## 2026-11-22 · The Phase 1 dashboard reads PostgreSQL `serving`
+
+- **Status:** agreed (owner, 22 Nov 2026)
+- **What:** Phase 1 loads gold aggregates into the `serving` schema of the `chronos` database in
+  one transaction, and the Streamlit dashboard reads only that schema. There is no release
+  manifest yet; Phase 3 wraps the same load in releases.
+- **Why:** it is already the final shape of the design (spec Revision 5), so Phase 3 adds
+  releases around the load instead of changing where dashboards read.
+- **Alternatives:** DuckDB's Iceberg extension over gold (dashboards would read unpublished data
+  until Phase 3); Spark over gold (slow start, needs Java in the dashboard).
+
+## 2026-11-22 · Phase 1 runs with a Python runner; the Airflow DAG wraps the same steps in Phase 2
+
+- **Status:** agreed (owner, 22 Nov 2026, with the two conditions below)
+- **What:** in Phase 1 a business date runs through `run_day`, a plain Python runner in the
+  project's venv.
+  1. Every step is its own function named after its DAG task (`register_files`,
+     `extract_dimensions`, `land_to_bronze`, `bronze_to_silver`, `build_dimensions`,
+     `build_facts`, `recompute_aggregates`, ...). Each takes the business date as an argument and
+     keeps no hidden state between calls. `run_day` only calls them in the DAG's order. The
+     `chronos_daily` DAG later is a thin wrapper around the same functions, with no logic of its
+     own.
+  2. The custom Airflow image (Java 17, PySpark 3.5.6 and the Iceberg 1.10.0 jar on top of
+     `apache/airflow:3.4.0-python3.11`) and the real `chronos_daily` DAG are built at the start
+     of Phase 2, before the late-data scenarios, because backfill, retries and
+     `max_active_runs = 1` are tested there.
+- **Why:** Phase 1 is about correct tables, and the Airflow image has no Java or Spark. Keeping
+  all logic in the step functions means the DAG adds orchestration only, so moving to Airflow
+  can't change results.
+- **Alternatives:** the custom image and DAG in Phase 1 (more setup before anything works).
+- **Spec section:** the Phased build plan's Phase 2 row should list the custom Airflow image and
+  the `chronos_daily` DAG as its first items.
+
+## 2026-11-22 · PostgreSQL tests run in CI against a service container
+
+- **Status:** proposed
+- **What:** tests that need PostgreSQL carry the `postgres` marker and use a throwaway database
+  per test, created and dropped by `tests/conftest.py`. CI starts `postgres:16.16` as a GitHub
+  Actions service container and sets `CHRONOS_REQUIRE_POSTGRES=1`, so these tests run on every
+  push and a skip there counts as a failure. Locally they skip with a reason when the database
+  isn't running.
+- **Why:** the replay-clock trigger and the generator's customer writes carry two of the spec's
+  easy-to-break rules; they deserve CI, and PostgreSQL is already part of the stack. Service
+  containers cost nothing on GitHub-hosted runners.
+- **Alternatives:** run them only locally (the rules could break unnoticed between local runs).
+- **Effect on the CI/local test split above:** PostgreSQL moves to "CI and locally"; only tests
+  needing `data/raw/olist/` stay local.
