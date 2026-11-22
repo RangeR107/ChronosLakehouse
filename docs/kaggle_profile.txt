@@ -1,0 +1,139 @@
+== ROW COUNTS
+orders: 99,441 rows, cols=['order_id', 'customer_id', 'order_status', 'order_purchase_timestamp', 'order_approved_at', 'order_delivered_carrier_date', 'order_delivered_customer_date', 'order_estimated_delivery_date']
+items: 112,650 rows, cols=['order_id', 'order_item_id', 'product_id', 'seller_id', 'shipping_limit_date', 'price', 'freight_value']
+payments: 103,886 rows, cols=['order_id', 'payment_sequential', 'payment_type', 'payment_installments', 'payment_value']
+reviews: 99,224 rows, cols=['review_id', 'order_id', 'review_score', 'review_comment_title', 'review_comment_message', 'review_creation_date', 'review_answer_timestamp']
+customers: 99,441 rows, cols=['customer_id', 'customer_unique_id', 'customer_zip_code_prefix', 'customer_city', 'customer_state']
+products: 32,951 rows, cols=['product_id', 'product_category_name', 'product_name_lenght', 'product_description_lenght', 'product_photos_qty', 'product_weight_g', 'product_length_cm', 'product_height_cm', 'product_width_cm']
+sellers: 3,095 rows, cols=['seller_id', 'seller_zip_code_prefix', 'seller_city', 'seller_state']
+translation: 71 rows, cols=['product_category_name', 'product_category_name_english']
+
+== ORDERS
+unique order_id: 99441
+purchase range: 2016-09-04 21:15:19 -> 2018-10-17 17:30:18
+status counts:
+ order_status
+delivered      96478
+shipped         1107
+canceled         625
+unavailable      609
+invoiced         314
+processing       301
+created            5
+approved           2
+null counts in milestones:
+ order_purchase_timestamp            0
+order_approved_at                 160
+order_delivered_carrier_date     1783
+order_delivered_customer_date    2965
+order_estimated_delivery_date       0
+
+delivered orders: 96478
+delivered but missing delivered_customer_date: 8
+delivered but missing approved_at: 14
+delivered but missing carrier_date: 2
+late vs estimate (date-level): 6,534 of 96,470 = 6.77%
+purchase->delivered days: median 10.2, p90 23.1, p99 46.1, max 209.6
+
+== TIMESTAMP ORDER VIOLATIONS (all orders)
+approved < purchase: 0
+carrier < approved: 1359
+carrier < purchase: 166
+delivered < carrier: 23
+delivered < purchase: 0
+canceled orders: 625 | with approved_at: 484 | with carrier date: 75 | with delivered date: 6
+
+== DAILY VOLUME
+days with orders: 634 | Jun2017-May2018 median/day: 171.0 mean: 188.4
+top 5 days:
+ order_purchase_timestamp
+2017-11-24    1176
+2017-11-25     499
+2017-11-27     403
+2017-11-26     391
+2017-11-28     380
+orders by weekday:
+ order_purchase_timestamp
+Monday       16196
+Tuesday      15963
+Wednesday    15552
+Thursday     14761
+Friday       14122
+Sunday       11960
+Saturday     10887
+orders by month:
+ order_purchase_timestamp
+2016-09       4
+2016-10     324
+2016-12       1
+2017-01     800
+2017-02    1780
+2017-03    2682
+2017-04    2404
+2017-05    3700
+2017-06    3245
+2017-07    4026
+2017-08    4331
+2017-09    4285
+2017-10    4631
+2017-11    7544
+2017-12    5673
+2018-01    7269
+2018-02    6728
+2018-03    7211
+2018-04    6939
+2018-05    6873
+2018-06    6167
+2018-07    6292
+2018-08    6512
+2018-09      16
+2018-10       4
+Freq: M
+
+== CUSTOMERS
+customer_id unique: 99441 | rows: 99441
+customer_unique_id unique: 96096
+unique customers with 2+ customer_ids (orders): 2997 | 3+: 252
+unique customers with >1 zip prefix: 250 | >1 city: 122 | >1 state: 39
+orders.customer_id all in customers: True
+states: 27
+
+== ITEMS / SELLERS
+orders with items: 98666 | orders without items: 775
+orders with 2+ sellers: 1,278 of 98,666 = 1.30%
+orders with 2+ items: 9,803 = 9.94%; max items in one order: 21
+item seller_ids all in sellers: True
+item product_ids all in products: True
+unique sellers in items: 3095 | sellers file: 3095
+price range: 0.85 6735.0 | freight range: 0.0 409.68
+items with price<=0: 0 | freight==0: 383
+
+== PRODUCTS
+products missing category: 610
+categories: 73 | without English translation: ['pc_gamer', 'portateis_cozinha_e_preparadores_de_alimentos']
+
+== PAYMENTS
+orders with payments: 99440 | orders without payments: 1
+orders with 2+ payment rows: 2,961 = 2.98%
+payment types:
+ payment_type
+credit_card    76795
+boleto         19784
+voucher         5775
+debit_card      1529
+not_defined        3
+payment_value==0 rows: 9
+orders where payments != items+freight by > 1.00 BRL: 249 of 98,665
+
+== REVIEWS
+review rows: 99224 | unique review_id: 98410 | unique order_id: 98673
+orders with 2+ reviews: 547
+review_ids attached to 2+ orders: 789
+score distribution:
+ review_score
+1    11424
+2     3151
+3     8179
+4    19142
+5    57328
+review_creation_date sample: 2018-01-18 00:00:00 | answer ts sample: 2018-01-18 21:46:59
