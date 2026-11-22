@@ -11,6 +11,7 @@ import argparse
 from datetime import date, timedelta
 from pathlib import Path
 
+from jobs.bronze_to_silver import bronze_to_silver
 from jobs.context import Context
 from jobs.db import conninfo
 from jobs.extract_dimensions import extract_dimensions
@@ -23,9 +24,10 @@ def run_day(ctx: Context, business_date: date) -> dict:
     registered = register_files(ctx, business_date)
     extracted = extract_dimensions(ctx, business_date)
     landed = land_to_bronze(ctx, business_date, registered["new"])
+    silver = bronze_to_silver(ctx, business_date)
     return {"business_date": business_date.isoformat(), "files": len(registered["new"]),
             "events": landed, "missing": registered["missing"],
-            "unlisted": registered["unlisted"], "extracted": extracted}
+            "unlisted": registered["unlisted"], "extracted": extracted, "silver": silver}
 
 
 def main(argv=None):
