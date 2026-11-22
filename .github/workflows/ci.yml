@@ -7,6 +7,21 @@ on:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+    # The same PostgreSQL image as docker-compose.yml, so the source-database tests run in CI
+    # instead of being skipped. Free on GitHub-hosted runners.
+    services:
+      postgres:
+        image: postgres:16.16
+        env:
+          POSTGRES_USER: chronos
+          POSTGRES_PASSWORD: chronos
+          POSTGRES_DB: chronos
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U chronos -d chronos"
+          --health-interval 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v5
 
@@ -29,3 +44,6 @@ jobs:
       # first use, so this step needs network access.
       - name: Test
         run: pytest
+        env:
+          # CI has a database, so a PostgreSQL test that skips here means something is broken.
+          CHRONOS_REQUIRE_POSTGRES: "1"

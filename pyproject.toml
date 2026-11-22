@@ -8,9 +8,11 @@ version = "0.0.1"
 description = "Batch lakehouse that replays Olist orders as a late, messy event feed and publishes only audited releases."
 # Python 3.11 matches AWS Glue 5.1, so code tested here runs there unchanged.
 requires-python = ">=3.11,<3.12"
-# Exact pins: the spec pins PySpark to Glue 5.1's Spark 3.5.6.
+# Exact pins: the spec pins PySpark to Glue 5.1's Spark 3.5.6. psycopg matches the version
+# Airflow 3.4.0's constraints install, so the Phase 2 Airflow image needs no second copy.
 dependencies = [
     "pyspark==3.5.6",
+    "psycopg[binary]==3.3.6",
 ]
 
 [project.optional-dependencies]
@@ -34,6 +36,9 @@ include = ["generator*", "jobs*", "sentinel*"]
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-ra"
+markers = [
+    "postgres: needs a reachable PostgreSQL (skipped otherwise; CHRONOS_REQUIRE_POSTGRES=1 fails instead)",
+]
 
 [tool.ruff]
 line-length = 100
