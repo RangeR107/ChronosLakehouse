@@ -108,15 +108,31 @@ def test_unlisted_files_are_reported_and_never_loaded(ctx):
     stray = ctx.landing_dir / "date=2017-01-05" / "events_2017-01-05T11.jsonl"
     stray.write_text('{"event_id": "not-from-the-producer"}\n')
     result = run_day(ctx, JAN5)
-    assert result["unlisted"] == ["events_2017-01-05T11.jsonl"]
+    assert result["unlisted"] == ["date=2017-01-05/events_2017-01-05T11.jsonl"]
     assert all(r.source_file != "date=2017-01-05/events_2017-01-05T11.jsonl" for r in events(ctx))
 
 
 def test_missing_files_are_reported_and_the_rest_load(ctx):
     (ctx.landing_dir / "date=2017-01-05" / "events_2017-01-05T23.jsonl").unlink()
     result = run_day(ctx, JAN5)
-    assert result["missing"] == ["events_2017-01-05T23.jsonl"]
+    assert result["missing"] == ["date=2017-01-05/events_2017-01-05T23.jsonl"]
     assert len(events(ctx)) == 2
+
+
+def test_a_late_file_is_loaded_by_the_next_run(ctx):
+    # The producer lists the 23:00 file in 5 Jan's marker but delivers it after that day's run.
+    late = ctx.landing_dir / "date=2017-01-05" / "events_2017-01-05T23.jsonl"
+    content = late.read_bytes()
+    late.unlink()
+    assert run_day(ctx, JAN5)["missing"] == ["date=2017-01-05/events_2017-01-05T23.jsonl"]
+    late.write_bytes(content)
+    result = run_day(ctx, date(2017, 1, 6))
+    assert "date=2017-01-05/events_2017-01-05T23.jsonl" not in result["missing"]
+    rows = [r for r in events(ctx) if r.source_file.endswith("T23.jsonl")
+            and r.source_file.startswith("date=2017-01-05")]
+    # events() reads 5 Jan's partition: the file keeps its own business date, and its arrival
+    # time is the replay time of the run that received it.
+    assert rows and {r.ingested_at for r in rows} == {"2017-01-07 00:00:00"}
 
 
 def test_a_file_changed_after_the_marker_is_refused(ctx):
@@ -134,8 +150,9 @@ def test_no_marker_means_not_ready(ctx):
 
 
 def test_a_day_with_no_events_loads_nothing(ctx):
-    assert run_day(ctx, JAN15) == {"business_date": "2017-01-15", "files": 0, "events": 0,
-                                   "missing": [], "unlisted": []}
+    # 3 Jan: no events that day, nor in the ten days its run looks back over.
+    assert run_day(ctx, date(2017, 1, 3)) == {"business_date": "2017-01-03", "files": 0,
+                                              "events": 0, "missing": [], "unlisted": []}
 
 
 def test_every_event_lands_once_over_the_whole_fixture(ctx):

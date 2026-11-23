@@ -8,7 +8,7 @@ and deduplicated in silver.
 """
 import hashlib
 import json
-from datetime import date
+from datetime import date, timedelta
 
 from pyspark.sql import functions as F
 from pyspark.sql.types import IntegerType, StringType, StructField, StructType
@@ -18,6 +18,16 @@ from jobs.context import Context, run_id, run_time
 # The producer's delivery contract (spec: "Completion marker"). The pipeline may read it; it
 # says what was sent, never what is wrong. The ground-truth manifest is a different thing.
 MARKER = "_complete.json"
+
+# How far back register_files looks for files delivered after their date's run. The generator's
+# late files arrive one day late; a week and a half leaves room for a producer outage.
+LOOKBACK_DAYS = 10
+
+
+
+def folder_date():
+    """Each file's business date is the landing folder it sits in, read from its path."""
+    return F.to_date(F.regexp_extract("source_file", r"^date=(\d{4}-\d{2}-\d{2})/", 1))
 
 LINES_SCHEMA = StructType([
     StructField("source_file", StringType(), False),
@@ -74,33 +84,42 @@ def wait_for_landing(ctx: Context, business_date: date) -> dict:
     return json.loads(path.read_text())
 
 
-def loaded_files(ctx: Context, business_date: date) -> set[str]:
+def loaded_files(ctx: Context, first: date, last: date) -> set[str]:
     rows = ctx.spark.sql(f"""
         SELECT file_path FROM {ctx.table('bronze', 'file_manifest')}
-        WHERE business_date = DATE'{business_date}'""").collect()
+        WHERE business_date BETWEEN DATE'{first}' AND DATE'{last}'""").collect()
     return {r.file_path for r in rows}
 
 
 def register_files(ctx: Context, business_date: date) -> dict:
-    """Compare the landing folder with the marker and the manifest.
+    """Compare the landing folders with their markers and the manifest.
 
     Returns the files to load ("new": listed, present and never loaded) plus what the
-    completeness check needs: files the marker lists that aren't there ("missing") and files
-    that are there but the marker doesn't list ("unlisted"). Unlisted files are never loaded.
+    completeness check needs: files a marker lists that aren't there ("missing") and files
+    that are there but no marker lists ("unlisted"). Unlisted files are never loaded.
+
+    The previous LOOKBACK_DAYS folders are checked too: a file the producer delivers a day late
+    lands in its own date's folder, where the marker said it would be, after that date's run.
     """
     ensure_bronze_tables(ctx)
-    marker = wait_for_landing(ctx, business_date)
-    folder = ctx.landing_dir / f"date={business_date}"
-    listed = {f["file"]: f for f in marker["files"]}
-    on_disk = {p.name for p in folder.glob("*.jsonl")}
-    done = loaded_files(ctx, business_date)
-
-    new = [{"path": f"date={business_date}/{name}", "rows": listed[name]["rows"],
-            "sha256": listed[name]["sha256"]}
-           for name in sorted(listed.keys() & on_disk)
-           if f"date={business_date}/{name}" not in done]
-    return {"business_date": business_date.isoformat(), "new": new,
-            "missing": sorted(listed.keys() - on_disk), "unlisted": sorted(on_disk - listed.keys())}
+    wait_for_landing(ctx, business_date)
+    first = business_date - timedelta(days=LOOKBACK_DAYS)
+    done = loaded_files(ctx, first, business_date)
+    new, missing, unlisted = [], [], []
+    for n in range(LOOKBACK_DAYS, -1, -1):
+        day = business_date - timedelta(days=n)
+        folder = ctx.landing_dir / f"date={day}"
+        if not (folder / MARKER).exists():
+            continue
+        listed = {f["file"]: f for f in json.loads((folder / MARKER).read_text())["files"]}
+        on_disk = {p.name for p in folder.glob("*.jsonl")}
+        new += [{"path": f"date={day}/{name}", "rows": listed[name]["rows"],
+                 "sha256": listed[name]["sha256"]}
+                for name in sorted(listed.keys() & on_disk) if f"date={day}/{name}" not in done]
+        missing += [f"date={day}/{name}" for name in sorted(listed.keys() - on_disk)]
+        unlisted += [f"date={day}/{name}" for name in sorted(on_disk - listed.keys())]
+    return {"business_date": business_date.isoformat(), "new": new, "missing": missing,
+            "unlisted": unlisted}
 
 
 def land_to_bronze(ctx: Context, business_date: date, files: list[dict]) -> int:
@@ -116,7 +135,6 @@ def land_to_bronze(ctx: Context, business_date: date, files: list[dict]) -> int:
     already = set()
     if paths:
         already = {r.source_file for r in ctx.spark.table(events)
-                   .where(F.col("business_date") == F.lit(business_date))
                    .where(F.col("source_file").isin(paths))
                    .select("source_file").distinct().collect()}
 
@@ -140,14 +158,16 @@ def land_to_bronze(ctx: Context, business_date: date, files: list[dict]) -> int:
         (ctx.spark.createDataFrame(lines, LINES_SCHEMA)
          .withColumn("event_id", F.get_json_object("raw", "$.event_id"))
          .withColumn("event_type", F.get_json_object("raw", "$.event_type"))
-         .withColumn("business_date", F.lit(business_date))
+         .withColumn("business_date", folder_date())
          .withColumn("ingested_at", ingested)
          .writeTo(events).append())
     if manifest:
         (ctx.spark.createDataFrame(manifest, "file_path string, etag string, size_bytes long,"
                                              " row_count int")
-         .withColumn("business_date", F.lit(business_date))
+         .withColumn("source_file", F.col("file_path"))
+         .withColumn("business_date", folder_date())
          .withColumn("run_id", F.lit(run_id(business_date)))
          .withColumn("loaded_at", ingested)
+         .drop("source_file")
          .writeTo(ctx.table("bronze", "file_manifest")).append())
     return len(lines)
