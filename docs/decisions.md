@@ -463,3 +463,211 @@ before the phase that depends on it).
   straightforward optimisation.
 - **Alternatives:** incremental SCD Type 2 MERGE logic (closing and opening versions row by row:
   more code, and late versions need special cases); keys from Python's hash() (not stable).
+
+## 2026-11-23 · build_facts: rebuild touched orders whole; the ledger holds the mark
+
+- **Status:** proposed
+- **What a run rebuilds:** the orders with events silver received after the latest
+  `ingested_at` in `gold.fact_order_events`, up to the run's replay time. Each touched order's
+  rows are derived again from all of its current events, and merged only where they changed
+  (`jobs/merge.py`, shared with build_dimensions). fact_order_events is written last, so a run
+  that dies midway leaves the mark where it was; the rerun rebuilds the same orders.
+- **Milestones and status:** each milestone comes from the current (highest) version of its own
+  event type, whatever order events arrived in. Status: cancelled and unavailable win, then
+  delivered, else open (`final_status` null, `is_open` true).
+- **Lags:** elapsed days with the time of day (seconds / 86,400) from purchase to approval,
+  approval to carrier, carrier to delivery and purchase to delivery. A lag is left empty when a
+  flag says one of its timestamps is out of order (Real defects table: "left out of the lag").
+  `days_early` is in calendar days, as question 2 defines it.
+- **dq_flags on the snapshot:** carrier_before_approval, carrier_before_purchase,
+  delivered_before_carrier, delivered_without_date, delivered_never_approved,
+  canceled_with_delivery_date, no_items (not canceled or unavailable), no_payments,
+  payment_mismatch (payments and items plus freight differ by more than 1 BRL). On fact_payments:
+  zero_value, zero_installments, type_not_defined.
+- **Keys:** product and seller keys come from the ids themselves, not a dimension lookup, so a
+  fact gets the right key before its dimension row exists (Phase 2's inferred members use the
+  same key). customer_key is the version effective at purchase; the delivery geography key is
+  built from the order's own address.
+- **Not yet (Phase 2):** dirty periods, re-keying facts after a late address version, removing
+  item rows if a correction ever drops an item.
+- **Alternatives:** rebuild every order every run (simple, but 99,441 orders every day on the
+  full replay); MERGE each event as it comes (the result would depend on arrival order).
+- **Spec section:** Data model could list the lag definitions and the snapshot's flag names.
+
+## 2026-11-23 · First aggregate, serving load and dashboard
+
+- **Status:** proposed
+- **Aggregate:** `gold.agg_delivery_by_month_region` (questions 1 and 2) at the grain of
+  measure_spec.py's `q1_q2_delivery_by_month_region.csv`: delivery month x delivery region plus
+  an `all` slice. Percentiles interpolate linearly, as pandas does. Phase 1 recomputes it whole;
+  it is a few hundred rows.
+- **load_serving:** copies the gold aggregate into a staging table, then one PostgreSQL
+  transaction MERGEs it into `serving.delivery_by_month_region`, deletes rows gold no longer
+  has, and updates `serving.load_state` (run and business date). The serving DDL lives in
+  `jobs/load_serving.py` for now; the spec's layout puts it in `sql/`, which is where it moves
+  when releases arrive in Phase 3.
+- **Dashboard:** `dashboard/app.py` (Streamlit 1.67.0), reading only `serving`. The spec's
+  layout names no Phase 1 dashboard folder; the Phase 3 console goes in `sentinel/console/`.
+- **Dependencies:** `duckdb==2.0.0` in `[dev]` for the truth test's reference build, and
+  `streamlit==1.67.0` in a new `[dashboard]` extra, since it pulls in pandas. Both are tools the
+  spec names; 2.0.0 was chosen over 2.0.1 because 2.0.1 was three days old.
+- **Spec section:** Architecture, Repository layout (add `dashboard/`).
+
+## 2026-11-23 · The Phase 1 truth test
+
+- **Status:** proposed
+- **What:** `tests/truth/test_truth_slice.py` replays the slice into a throwaway database and
+  namespace, runs all 60 days through `run_day`, and compares fact_order_fulfillment,
+  fact_order_items, fact_payments, fact_reviews, dim_customer, dim_geography, dim_seller,
+  dim_product and the aggregate with `tests/truth/reference.py`, row by row on each grain. The
+  reference is DuckDB SQL over the Olist CSVs, with its own surrogate-key macro and city
+  normalisation, applying the day-60 cut-off from the spec's written emission rule.
+- **Idempotency:** the first, a middle and the last day are each run twice; the second run must
+  leave a row count and content hash of every bronze, silver and gold table unchanged and write
+  nothing.
+- **Markers:** `olist` and `postgres`. It skips without the data unless CHRONOS_REQUIRE_OLIST=1.
+- **Not yet:** part 2 (event ledger against the ground-truth manifest) and part 3 (publication
+  history) need Phase 2's defects and Phase 3's releases. Rerunning an *old* day after later
+  days have run is not a retry: dimensions would be recomputed as that day knew them. Phase 2's
+  Airflow backfill runs dates in order; what clearing an old task instance should do is
+  decided there.
+
+## 2026-11-23 · One seller city in decomposed Unicode (found by the truth test)
+
+- **Status:** proposed
+- **Finding:** one seller's city is "são paulo" written as `a` + U+0303 (combining tilde) rather
+  than the single letter `ã`. The accent map didn't cover combining marks, so the pipeline made
+  it a second São Paulo in dim_geography; the DuckDB reference (`strip_accents`) didn't. The
+  truth test caught it as 1 missing and 1 extra geography key out of 3,916.
+- **Fix:** `normalise_city` also removes Unicode combining marks (`\p{M}`), and the geography
+  unit test includes the decomposed spelling.
+- **Alternative:** full Unicode NFKD normalisation (Spark 3.5 has no built-in; a Python UDF would
+  slow every run for one row).
+- **Spec section:** Data sources, Real defects: could list "city names in decomposed Unicode:
+  1 seller; None: normalised".
+
+## 2026-11-23 · Two bugs the fixture truth test found
+
+- **Status:** fixed
+- **The replay must run one day ahead of the pipeline, not all at once.** The truth harness
+  wrote all days' files and master rows first, then ran the pipeline. The customer master only
+  holds the current address, so day 1's extract already saw the person's final address and the
+  first SCD version was lost (person_a in the fixture). `generator.replay` now takes
+  `after_day`, called once each date is written, and the truth test runs `run_day` there. The
+  pipeline still never imports the generator. The real slice has no address changes, which is
+  why only the fixture showed it.
+- **Aggregates now delete rows a recompute no longer produces.** An order delivered on 10 Jan
+  and cancelled on 11 Jan left a stale North row in the aggregate, because the MERGE only
+  inserted and updated. `merge_changed(..., delete_missing=True)` deletes them; it is used for
+  tables recomputed whole. Dimensions don't need it: what a run can see only grows.
+
+## 2026-11-23 · Phase 2: the Airflow image and DAGs
+
+- **Status:** proposed (the image and DAG were agreed for the start of Phase 2; these are the
+  details)
+- **Image:** `airflow_local/Dockerfile`, on `apache/airflow:3.4.0-python3.11`. Java 17 is
+  copied from `eclipse-temurin:17.0.21_9-jre-noble`: the Airflow image's Debian release has no
+  OpenJDK 17 package (only 21), and the newer 17.0.21.1 Temurin tag has no arm64 build.
+  PySpark 3.5.6 is installed against Airflow's 3.4.0 constraints file. The Iceberg 1.10.0 jar
+  is downloaded at build time and checked against Maven's SHA-1, and `CHRONOS_SPARK_JARS`
+  points Spark at it.
+- **Code and lake:** `jobs/`, `generator/`, `contracts/`, `sql/` and the Olist folder are
+  mounted read-only at `/opt/chronos`. The container's lake is `lake/airflow/`, separate from
+  the laptop's: the Iceberg Hadoop catalog stores absolute paths.
+- **`chronos_daily`:** one task per step function, no logic of its own. `schedule=None`;
+  `max_active_runs=1`; every task `depends_on_past` and `wait_for_downstream`; retries twice
+  with backoff. `wait_for_landing` retries every 5 minutes for an hour instead of being a
+  sensor.
+- **`chronos_replay`:** plays the source system for a date, then triggers `chronos_daily` for
+  that date and waits. Bounded `@daily` schedule (2016-09-04 to 2018-09-30).
+- **Found while testing:**
+  - An Airflow 3 backfill applies its own `--max-active-runs`, not the DAG's. Without
+    `depends_on_past`, three dates ran at once.
+  - An unbounded `@daily` made the scheduler create a run for today's wall-clock date.
+- **Verified:** a 7-date backfill (`--max-active-runs 1 --reprocess-behavior failed`) ran in
+  order, about a minute per date.
+- **Not yet (Phase 3):** `open_run`, `sentinel_audit`, `publish_release`, `notify`.
+
+## 2026-11-23 · Phase 2: reversible defects and the ground truth
+
+- **Status:** proposed
+- **Generator:** `generator/defects.py`, at the spec's suggested rates. Each decision is a
+  SHA-256 of (seed, defect, event or order), so the same event gets the same defect in every
+  replay and any slice. Tests can script defects exactly with `Defects.only({...})`.
+- **Choices the spec leaves open:**
+  - Each event gets at most one timing defect, in the order correction, late, out of order,
+    duplicate, so delays can't add up.
+  - A wrong delivery time is one day later than Olist's. A wrong payment value is 10% higher
+    (10.00 when Olist's is 0). The correction arrives 1 to 3 days later.
+  - Duplicates are resent 1 to 48 hours later.
+  - Out of order: the carrier handover is sent 1 to 48 hours after the delivery event.
+  - Held-back sellers: 0.2% of sellers, inserted 1 to 3 days after their first order in the
+    replay.
+- **Drain:** `DRAIN_DAYS = 11` (10-day late events plus a late file's day). After `feed_end`
+  nothing new is emitted.
+- **Ground truth:** `replay(..., manifest=path)` writes every injected defect as JSON outside
+  the landing folder. Tests use it and `generator.replay.plan`; pipeline code never does.
+- **What the default rates produce:**
+
+  | Defect | Jan–Feb 2017 slice | Full window (2017-01 to 2018-08) |
+  | --- | --- | --- |
+  | Late events | 201 | 9,636 |
+  | Duplicates | 225 | 9,584 |
+  | Corrections | 22 | 1,017 |
+  | Out of order | 18 | 830 |
+  | Early-arriving customers | 1 | 185 |
+  | Late address changes | 0 | 18 |
+  | Late files | 0 | 10 |
+  | Held-back sellers | 1 | 7 |
+
+  The spec expects "about 25" late address changes. 10% of the changes inside the window
+  gives 18.
+- **Deferred to Phase 3:** the announced schema change (a new optional field, then a rename
+  under schema_version 2). It tests the schema contract, which Phase 3's DataSentinel owns, and
+  none of the nine scenarios needs it.
+- **Spec section:** Event model, Reversible defects, could record these parameters.
+
+## 2026-11-23 · Phase 2: what the pipeline does with each defect
+
+- **Status:** proposed
+- **Late files:** `register_files` also checks the previous 10 dates' markers for listed files
+  not yet loaded. A bronze row's `business_date` is its file's folder, read from the path; its
+  `ingested_at` is the run that received it. Missing and unlisted files are reported as paths,
+  because several folders are checked.
+- **Inferred members:**
+  - A person with an order but no master row gets a placeholder: `is_inferred`, no address,
+    effective from their first order. That is exactly the key the real version will have, so
+    the real row overwrites it in place, with no fact rewrite.
+  - A seller named by an item but not in the master gets a placeholder with no location.
+  - Surrogate keys are now null when any part is null: `concat_ws` skips nulls, and the
+    placeholder's unknown location was getting a real-looking geography key.
+- **Re-keying:** each run also rebuilds orders whose fact keys no longer match the current
+  dimensions: the customer version effective at purchase changed (a late address change), or a
+  seller's location became known. **Spec mismatch:** scenario 5's test says "with no fact
+  rewrite". That holds for customers, but `fact_order_items.seller_geography_key` must be
+  rewritten when a placeholder seller becomes real, because the spec puts the seller location
+  key on the fact. The spec's own Kimball note (Design Tip #78) anticipates this.
+- **Dirty periods:** before merging the snapshot, `build_facts` records in `gold.dirty_periods`
+  the delivery months of every changed row, before and after the change, for questions 1 and
+  2. `recompute_aggregates` recomputes only those months, each one whole, and deletes rows that
+  disappear inside them.
+- **Published metrics:**
+  - `gold.fact_daily_metrics_published` is append-only, on the spec's grain, with
+    `release_id = run_id` until Phase 3 adds releases. Metric ids are `<metric>.<measure>`
+    from `metrics.yml`, such as `q1_late_delivery_rate.late_rate`.
+  - `gold.agg_restatements` (question 8) holds first against latest published value, with
+    numerators and denominators. It is served as `serving.restatements` and shown on the
+    dashboard.
+- **Spec mismatches to settle:**
+  - Scenario 8 expects "main ... unchanged" after a crash. Without Phase 3's branches, gold is
+    partly written. The Phase 2 test checks that serving is unchanged and that the rerun ends
+    identical to an uninterrupted run; "main unchanged" is tested once runs write to branches.
+  - Scenario 9: the test is a catch-up after a 4-day gap (no runs on 6 to 9 Jan, then
+    continuing), which must equal running daily. The serial Airflow backfill itself was
+    verified by hand, not in pytest.
+  - Phase 2's "Done when" says the truth test passes in CI. CI runs it on the fixture with
+    heavy defects; the real slice runs locally (the test split proposed on 22 Nov).
+- **Open:** clearing an *old* date in Airflow after later dates have run re-derives dimensions
+  as that date knew them. `depends_on_past` stops it from running early, not from running at
+  all. To decide in Phase 3, with releases: a rerun of an old date should probably republish
+  nothing.
