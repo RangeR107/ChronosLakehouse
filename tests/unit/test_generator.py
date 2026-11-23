@@ -159,3 +159,14 @@ def test_landing_files_are_never_modified(tmp_path, events):
     write_day(day, tmp_path, "2017-01-05")
     with pytest.raises(FileExistsError):
         write_day(day[:1], tmp_path, "2017-01-05")  # same file name, different content
+
+
+def test_a_held_back_seller_no_order_names_is_loaded_at_the_start():
+    # A slice starting 8 Jan holds no fixture order, so no order names s_1. Holding it back
+    # would mean it never reaches the master at all.
+    from generator.defects import HELD_SELLER, Defects
+    from generator.olist import load
+    from generator.replay import plan
+    scripted = Defects.only({(HELD_SELLER, "s_1"): 2})
+    assert plan(load(MINI), date(2017, 1, 8), date(2017, 1, 15), scripted).held == set()
+    assert plan(load(MINI), date(2017, 1, 1), date(2017, 1, 15), scripted).held == {"s_1"}
