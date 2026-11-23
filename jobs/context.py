@@ -18,7 +18,8 @@ class Context:
     landing_dir: Path
     # Prefix for namespaces, so tests can give each test its own tables in one warehouse.
     namespace_prefix: str = ""
-    # Where extract_dimensions reads the source master (jobs/db.py builds the default).
+    # The chronos database: extract_dimensions reads its `source` schema, load_serving writes
+    # `serving` (jobs/db.py builds the default).
     source_conninfo: str = ""
     # Static reference files delivered with the source (Olist's category translation).
     reference_dir: Path = Path("data/raw/olist")

@@ -5,6 +5,7 @@ produce identical keys; Python's hash() would not (it is randomised per process)
 joined with the ASCII unit separator, which can't occur in them, as event_id does.
 """
 import hashlib
+from functools import reduce
 
 from pyspark.sql import Column
 from pyspark.sql import functions as F
@@ -16,7 +17,11 @@ def surrogate_key(*parts: Column) -> Column:
     # conv() with a negative target base reads the 16 hex digits as a signed 64-bit number, so
     # keys whose first bit is set become negative BIGINTs instead of overflowing to null.
     digest = F.sha2(F.concat_ws(SEPARATOR, *parts), 256)
-    return F.conv(F.substring(digest, 1, 16), 16, -10).cast("bigint")
+    key = F.conv(F.substring(digest, 1, 16), 16, -10).cast("bigint")
+    # No key from incomplete parts: concat_ws skips nulls, so (a, null, b) would hash like (a, b)
+    # and a placeholder seller's unknown location would get a real-looking geography key.
+    any_null = reduce(lambda a, b: a | b, [p.isNull() for p in parts])
+    return F.when(~any_null, key)
 
 
 def surrogate_key_py(*parts: str) -> int:

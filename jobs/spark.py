@@ -20,10 +20,14 @@ def build_session(warehouse: str, app_name: str = "chronos", shuffle_partitions:
     # refuses to run Python code across minor versions. When Spark is started from Python, as
     # here, PySpark reads this environment variable, not the spark.pyspark.python setting.
     os.environ["PYSPARK_PYTHON"] = sys.executable
+    builder = SparkSession.builder.appName(app_name).master(master)
+    # The Airflow image ships the jar (CHRONOS_SPARK_JARS); elsewhere Spark fetches the package
+    # once into the local Ivy cache.
+    jars = os.environ.get("CHRONOS_SPARK_JARS")
+    builder = (builder.config("spark.jars", jars) if jars
+               else builder.config("spark.jars.packages", ICEBERG_PACKAGE))
     return (
-        SparkSession.builder.appName(app_name)
-        .master(master)
-        .config("spark.jars.packages", ICEBERG_PACKAGE)
+        builder
         .config("spark.sql.extensions",
                 "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
         .config(f"spark.sql.catalog.{CATALOG}", "org.apache.iceberg.spark.SparkCatalog")

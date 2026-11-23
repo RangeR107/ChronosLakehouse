@@ -8,13 +8,13 @@ change (an address version older than ones already loaded) land in the right pla
 chain is simply derived again.
 """
 from datetime import date, timedelta
-from functools import reduce
 
 from pyspark.sql import Column, DataFrame, Window
 from pyspark.sql import functions as F
 
 from jobs.context import Context, run_time
 from jobs.keys import surrogate_key
+from jobs.merge import create_tables, merge_changed
 
 TS = "timestamp_ntz"
 
@@ -59,15 +59,17 @@ KEYS = {"dim_customer": "customer_key", "dim_geography": "geography_key",
 
 
 def ensure_gold_tables(ctx: Context) -> None:
-    ctx.spark.sql(f"CREATE NAMESPACE IF NOT EXISTS {ctx.namespace('gold')}")
-    for name, columns in TABLES.items():
-        ctx.spark.sql(f"""CREATE TABLE IF NOT EXISTS {ctx.table('gold', name)} ({columns})
-                          USING iceberg TBLPROPERTIES ('format-version' = '2')""")
+    create_tables(ctx, "gold", TABLES)
 
 
 def normalise_city(c: Column) -> Column:
-    """Lower case, no accents, single spaces: 'São Paulo ' and 'sao paulo' are one place."""
-    return F.translate(F.lower(F.trim(F.regexp_replace(c, r"\s+", " "))), ACCENTS, PLAIN)
+    """Lower case, no accents, single spaces: 'São Paulo ' and 'sao paulo' are one place.
+
+    One seller's city is written in decomposed Unicode ('a' followed by a combining tilde), so
+    combining marks (Unicode category M) are removed as well as precomposed accented letters.
+    """
+    plain = F.translate(F.lower(F.trim(F.regexp_replace(c, r"\s+", " "))), ACCENTS, PLAIN)
+    return F.regexp_replace(plain, r"\p{M}", "")
 
 
 def known_by(ctx: Context, layer_table: str, business_date: date) -> DataFrame:
@@ -83,25 +85,40 @@ def latest_per_key(df: DataFrame, key: str) -> DataFrame:
 
 
 def customer_versions(ctx: Context, business_date: date) -> DataFrame:
-    """SCD Type 2 from the master's address history.
+    """SCD Type 2 from the master's address history, plus inferred members.
 
     Each state of a master row carries address_effective_from, the purchase time of the first
     order seen with that address: business time, never updated_at. A new version starts when zip,
     city or state changes (252 people get one on the full data). The dates are inferred from
     orders, which effective_from_basis records.
+
+    A person whose order has arrived but whose master row hasn't (an early-arriving fact) gets a
+    placeholder: is_inferred, no address, effective from their first order. That is exactly the
+    key the real row will have, so when it arrives it overwrites the placeholder in place and the
+    facts pointing at it stay attached (spec: Data model, "Inferred members").
     """
     rows = known_by(ctx, "customers_extract", business_date).select(
         "customer_unique_id", "customer_zip_code_prefix", "customer_city", "customer_state",
-        F.col("address_effective_from").alias("effective_from")).distinct()
+        F.col("address_effective_from").alias("effective_from"),
+        F.lit(False).alias("is_inferred")).distinct()
+    ordered = (ctx.spark.table(ctx.table("silver", "orders"))
+               .groupBy("customer_unique_id")
+               .agg(F.min("order_purchase_timestamp").alias("effective_from")))
+    inferred = ordered.join(rows.select("customer_unique_id"), "customer_unique_id",
+                            "left_anti").select(
+        "customer_unique_id", *(F.lit(None).cast("string").alias(c) for c in (
+            "customer_zip_code_prefix", "customer_city", "customer_state")),
+        "effective_from", F.lit(True).alias("is_inferred"))
+    versions = rows.unionByName(inferred)
     chain = Window.partitionBy("customer_unique_id").orderBy("effective_from")
-    return rows.select(
+    return versions.select(
         surrogate_key(F.col("customer_unique_id"),
                       F.col("effective_from").cast("string")).alias("customer_key"),
         "customer_unique_id", "customer_zip_code_prefix", "customer_city", "customer_state",
         "effective_from", F.lit("first_order_seen").alias("effective_from_basis"),
         F.lead("effective_from").over(chain).alias("effective_to"),
         F.lead("effective_from").over(chain).isNull().alias("is_current"),
-        F.lit(False).alias("is_inferred"))
+        "is_inferred")
 
 
 def geographies(ctx: Context, business_date: date) -> DataFrame:
@@ -127,10 +144,18 @@ def geography_key(zip_col: str, city_col: str, state_col: str):
 
 
 def sellers(ctx: Context, business_date: date) -> DataFrame:
-    s = latest_per_key(known_by(ctx, "sellers_extract", business_date), "seller_id")
-    return s.select(surrogate_key(F.col("seller_id")).alias("seller_key"), "seller_id",
-                    "seller_zip_code_prefix", "seller_city", "seller_state",
-                    F.lit(False).alias("is_inferred"))
+    """Type 1, plus a placeholder for a seller an order names before the master has it."""
+    s = latest_per_key(known_by(ctx, "sellers_extract", business_date), "seller_id").select(
+        "seller_id", "seller_zip_code_prefix", "seller_city", "seller_state",
+        F.lit(False).alias("is_inferred"))
+    named = ctx.spark.table(ctx.table("silver", "order_items")).select("seller_id").distinct()
+    inferred = named.join(s.select("seller_id"), "seller_id", "left_anti").select(
+        "seller_id", *(F.lit(None).cast("string").alias(c) for c in (
+            "seller_zip_code_prefix", "seller_city", "seller_state")),
+        F.lit(True).alias("is_inferred"))
+    return s.unionByName(inferred).select(
+        surrogate_key(F.col("seller_id")).alias("seller_key"), "seller_id",
+        "seller_zip_code_prefix", "seller_city", "seller_state", "is_inferred")
 
 
 def products(ctx: Context, business_date: date) -> DataFrame:
@@ -158,26 +183,7 @@ def calendar(ctx: Context) -> DataFrame:
 
 
 def merge_dimension(ctx: Context, name: str, rows: DataFrame) -> int:
-    """Insert new keys, update rows whose values changed, leave the rest untouched.
-
-    Comparing values first means an unchanged rerun commits nothing, so reruns stay idempotent
-    and the table's history only shows real changes. Returns the rows inserted or updated.
-    """
-    table, key = ctx.table("gold", name), KEYS[name]
-    s, t = rows.alias("s"), ctx.spark.table(table).alias("t")
-    # Null-safe: a current version's effective_to is null, and with a plain equality null never
-    # equals null, so every current version would look changed on every rerun.
-    same = reduce(lambda a, b: a & b, [F.col(f"s.{c}").eqNullSafe(F.col(f"t.{c}"))
-                                       for c in rows.columns])
-    changed = s.join(t, same, "left_anti").localCheckpoint()
-    count = changed.count()
-    if count:
-        view = f"_changed_{name}"
-        changed.createOrReplaceTempView(view)
-        ctx.spark.sql(f"""MERGE INTO {table} t USING {view} s ON t.{key} = s.{key}
-                          WHEN MATCHED THEN UPDATE SET *
-                          WHEN NOT MATCHED THEN INSERT *""")
-    return count
+    return merge_changed(ctx, ctx.table("gold", name), rows, [KEYS[name]])
 
 
 def build_dimensions(ctx: Context, business_date: date) -> dict[str, int]:

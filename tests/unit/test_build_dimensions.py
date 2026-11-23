@@ -56,6 +56,9 @@ def test_surrogate_key_matches_sha256_and_can_be_negative(spark):
            for ps in parts]
     assert got == [surrogate_key_py(*ps) for ps in parts]
     assert any(k < 0 for k in got), "the fixture should include a key with the top bit set"
+    missing = spark.range(1).select(surrogate_key(F.lit("71065"), F.lit(None).cast("string"),
+                                                  F.lit("DF"))).collect()[0][0]
+    assert missing is None  # an unknown part gives no key, never a key of the other parts
 
 
 def test_address_changes_become_versions(ctx):
@@ -111,8 +114,9 @@ def test_rerun_commits_nothing(ctx):
 
 def test_geography_normalises_city_and_maps_region(ctx):
     orders = ctx.spark.createDataFrame(
+        # The third spelling is decomposed Unicode: 'a' plus a combining tilde (one real seller).
         [("e1", "o1", "01310", "São Paulo "), ("e2", "o2", "01310", "sao paulo"),
-         ("e3", "o3", "69005", "manaus")],
+         ("e4", "o4", "01310", "sa\u0303o paulo"), ("e3", "o3", "69005", "manaus")],
         "event_id string, order_id string, customer_zip_code_prefix string, customer_city string")
     (orders.select("event_id", "order_id", F.lit("c").alias("customer_id"),
                    F.lit("p").alias("customer_unique_id"), "customer_zip_code_prefix",
