@@ -15,7 +15,10 @@
 
 x-airflow-common:
   &airflow-common
-  image: apache/airflow:3.4.0-python3.11
+  # apache/airflow:3.4.0-python3.11 plus Java 17, PySpark 3.5.6 and the Iceberg jar, so tasks
+  # can run the Spark jobs (airflow_local/Dockerfile).
+  build: ./airflow_local
+  image: chronos-airflow:3.4.0-python3.11
   env_file:
     - path: .env
       required: false
@@ -32,11 +35,26 @@ x-airflow-common:
     AIRFLOW__API_AUTH__JWT_ISSUER: ${AIRFLOW__API_AUTH__JWT_ISSUER:-airflow}
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
     AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
+    # The jobs reach the Chronos database over the compose network, on its container port.
+    CHRONOS_DB_HOST: chronos-db
+    CHRONOS_DB_PORT: '5432'
+    # Its own lake folders: the Iceberg Hadoop catalog stores absolute paths, so a warehouse
+    # written inside the container can't be read from the laptop, and the other way round.
+    CHRONOS_LANDING: /opt/chronos/lake/airflow/landing
+    CHRONOS_WAREHOUSE: /opt/chronos/lake/airflow/warehouse
+    CHRONOS_OLIST: /opt/chronos/data/raw/olist
   volumes:
     - ./dags:/opt/airflow/dags
     - ./logs:/opt/airflow/logs
     - ./airflow_local/config:/opt/airflow/config
     - ./airflow_local/plugins:/opt/airflow/plugins
+    # The pipeline's code, read-only, and the local lake (landing files and the warehouse).
+    - ./jobs:/opt/chronos/jobs:ro
+    - ./generator:/opt/chronos/generator:ro
+    - ./contracts:/opt/chronos/contracts:ro
+    - ./sql:/opt/chronos/sql:ro
+    - ./data/raw/olist:/opt/chronos/data/raw/olist:ro
+    - ./lake:/opt/chronos/lake
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
