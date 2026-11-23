@@ -19,6 +19,13 @@ dependencies = [
 dev = [
     "pytest==9.2.0",
     "ruff==0.17.6",
+    # The truth test's reference build is written in DuckDB SQL, so it shares no code with the
+    # pipeline it checks (spec: Testing and evaluation).
+    "duckdb==2.0.0",
+]
+# The Streamlit dashboard. It pulls in pandas, so it stays out of the pipeline's dependencies.
+dashboard = [
+    "streamlit==1.67.0",
 ]
 # Only for the reference scripts in tools/, at the versions their numbers were measured with.
 # Kept out of the core dependencies so pipeline code can't come to rely on pandas by accident.
@@ -38,6 +45,7 @@ pythonpath = ["."]
 addopts = "-ra"
 markers = [
     "postgres: needs a reachable PostgreSQL (skipped otherwise; CHRONOS_REQUIRE_POSTGRES=1 fails instead)",
+    "olist: needs the Olist CSVs in data/raw/olist (skipped otherwise; CHRONOS_REQUIRE_OLIST=1 fails instead)",
 ]
 
 [tool.ruff]

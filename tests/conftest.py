@@ -8,6 +8,7 @@ the chronos database a developer is using.
 """
 import os
 import uuid
+from contextlib import contextmanager
 
 import psycopg
 import pytest
@@ -26,8 +27,8 @@ def spark(tmp_path_factory):
     session.stop()
 
 
-@pytest.fixture
-def source_db():
+@contextmanager
+def throwaway_database():
     """A fresh database with the source schema applied; yields an open connection to it."""
     try:
         admin = psycopg.connect(conninfo("postgres"), autocommit=True, connect_timeout=3)
@@ -48,3 +49,9 @@ def source_db():
         conn.close()
         admin.execute(f'DROP DATABASE "{name}"')
         admin.close()
+
+
+@pytest.fixture
+def source_db():
+    with throwaway_database() as conn:
+        yield conn
