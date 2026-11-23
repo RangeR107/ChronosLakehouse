@@ -20,6 +20,8 @@ class Context:
     namespace_prefix: str = ""
     # Where extract_dimensions reads the source master (jobs/db.py builds the default).
     source_conninfo: str = ""
+    # Static reference files delivered with the source (Olist's category translation).
+    reference_dir: Path = Path("data/raw/olist")
 
     def table(self, layer: str, name: str) -> str:
         return f"{CATALOG}.{self.namespace_prefix}{layer}.{name}"

@@ -436,3 +436,30 @@ before the phase that depends on it).
   too (the truth test would no longer compare with what Olist recorded).
 - **Spec sections changed:** Data sources (Real defects table: two new rows); DataSentinel
   (Checks: Valid values names the two flagged exceptions).
+
+## 2026-11-22 · build_dimensions: recompute, then MERGE only what changed
+
+- **Status:** proposed
+- **Recompute and compare:** each run derives every dimension from bronze extracts and silver as
+  the run could see them (rows extracted by its replay time), then MERGEs only rows that differ
+  from gold, compared null-safely. An unchanged rerun commits nothing. Recomputing the SCD Type 2
+  chain each time is what puts a late address version (scenario 6) in the right place: the chain
+  is derived again, so effective_to values around it are fixed in the same run.
+- **Surrogate keys:** `jobs/keys.py`: first 8 bytes of SHA-256 over the natural key parts
+  (joined with 0x1F), read as a signed BIGINT, computed in Spark SQL; a Python twin checks it.
+  dim_customer keys on (customer_unique_id, effective_from), geography on (zip, normalised city,
+  state), sellers and products on their ids.
+- **Geography:** every delivery address in silver.orders plus every seller address; cities are
+  normalised (lower case, single spaces, no accents, ´ as ') so "São Paulo " and "sao paulo" are
+  one place. Region comes only from the IBGE state map.
+- **Products:** English category from Olist's translation file, read directly as static
+  reference data from `Context.reference_dir`; "unknown" for the 610 products without a
+  category; the 2 untranslated categories keep their Portuguese names.
+- **Calendar:** 2016-01-01 to 2019-12-31, with Black Friday 2016, 2017 and 2018 as sale days.
+- **Not yet:** inferred members (`is_inferred` is always false until Phase 2's early-arriving
+  facts) and re-keying facts after a late version (Phase 2, with build_facts).
+- **Cost to fix later:** the 60-day slice now takes about 5 minutes, mostly recomputing all
+  32,951 products and the calendar every day. Recomputing only when the inputs changed is a
+  straightforward optimisation.
+- **Alternatives:** incremental SCD Type 2 MERGE logic (closing and opening versions row by row:
+  more code, and late versions need special cases); keys from Python's hash() (not stable).
