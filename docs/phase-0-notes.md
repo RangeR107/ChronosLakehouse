@@ -11,6 +11,10 @@ and all eight metric definitions are written." Both are true:
   the spec now carries in Kaggle's version (see "What the data check found").
 - `docs/metrics.yml` holds the 9 shared definitions and all 8 metrics.
 
+## Truth test, last passed
+
+Not applicable: Phase 0 builds no tables. The truth test starts in Phase 1.
+
 ## What was built
 
 | Piece | Where | In one sentence |

@@ -58,6 +58,9 @@ TABLES = {
 # Metrics whose periods a changed fulfillment row dirties, and the date that picks the period
 # (spec: Late-arriving data, "Dirty periods"; questions 1 and 2: the delivery month).
 DIRTIED_BY_DELIVERY = ("q1_late_delivery_rate", "q2_delivery_promise")
+# Question 3 follows each item's shipping-limit month. Its aggregate isn't built yet; the dirty
+# months are recorded now so it starts with a complete history.
+DIRTIED_BY_SHIPPING_LIMIT = ("q3_seller_handover",)
 GRAIN = {
     "fact_order_events": ["event_id"],
     "fact_order_fulfillment": ["order_id"],
@@ -122,22 +125,40 @@ def stale_orders(ctx: Context) -> DataFrame:
     return customers.unionByName(sellers).distinct()
 
 
-def dirty_periods(ctx: Context, snapshot: DataFrame, business_date: date) -> DataFrame:
-    """The delivery months a run's changed snapshot rows touch, before and after the change.
+def changed_months(ctx: Context, name: str, rows: DataFrame, keys: list[str],
+                   date_column: str) -> DataFrame:
+    """Months of date_column touched by rows that change, counting both before and after.
 
     Both sides count: an order whose delivery date is corrected from 31 Jan to 1 Feb changes
     January and February.
     """
-    table = ctx.table("gold", "fact_order_fulfillment")
-    changed = changed_rows(ctx, table, snapshot)
-    before = ctx.spark.table(table).join(changed.select("order_id"), "order_id")
-    months = (changed.select("order_delivered_customer_date")
-              .unionByName(before.select("order_delivered_customer_date"))
-              .where(F.col("order_delivered_customer_date").isNotNull())
-              .select(F.trunc("order_delivered_customer_date", "month").alias("period_start"))
-              .distinct())
-    metrics = ctx.spark.createDataFrame([(m,) for m in DIRTIED_BY_DELIVERY], "metric_id string")
-    return months.crossJoin(metrics).select(
+    table = ctx.table("gold", name)
+    changed = changed_rows(ctx, table, rows)
+    before = ctx.spark.table(table).join(changed.select(*keys), keys)
+    return (changed.select(date_column).unionByName(before.select(date_column))
+            .where(F.col(date_column).isNotNull())
+            .select(F.trunc(date_column, "month").alias("period_start")).distinct())
+
+
+def dirty_periods(ctx: Context, snapshot: DataFrame, items: DataFrame,
+                  business_date: date) -> DataFrame:
+    """Every metric period this run's changes touch (spec: Late-arriving data, "Dirty periods").
+
+    Questions 1 and 2 follow the snapshot's delivery month. Question 3 follows each changed
+    item's shipping-limit month, which is how re-keying a seller (a placeholder becoming the
+    real seller) reaches the metrics: through the same dirty-period list as any other change.
+    """
+    by_metric = [
+        (changed_months(ctx, "fact_order_fulfillment", snapshot, GRAIN["fact_order_fulfillment"],
+                        "order_delivered_customer_date"), DIRTIED_BY_DELIVERY),
+        (changed_months(ctx, "fact_order_items", items, GRAIN["fact_order_items"],
+                        "shipping_limit_date"), DIRTIED_BY_SHIPPING_LIMIT),
+    ]
+    parts = []
+    for months, metric_ids in by_metric:
+        metrics = ctx.spark.createDataFrame([(m,) for m in metric_ids], "metric_id string")
+        parts.append(months.crossJoin(metrics))
+    return parts[0].unionByName(parts[1]).select(
         F.lit(run_id(business_date)).alias("run_id"), "metric_id",
         F.lit("month").alias("period_type"), "period_start")
 
@@ -313,9 +334,11 @@ def build_facts(ctx: Context, business_date: date) -> dict[str, int]:
     result = {"orders_rebuilt": touched.count()}
     # Dirty periods first: they need the rows as they were, and a crash after this point leaves
     # them recorded for the rerun, which finds the facts already changed.
-    result["dirty_periods"] = merge("dirty_periods", dirty_periods(ctx, snapshot, business_date))
+    items = order_items(ctx, snapshot, current).localCheckpoint()
+    result["dirty_periods"] = merge("dirty_periods",
+                                    dirty_periods(ctx, snapshot, items, business_date))
     result["fact_order_fulfillment"] = merge("fact_order_fulfillment", snapshot)
-    result["fact_order_items"] = merge("fact_order_items", order_items(ctx, snapshot, current))
+    result["fact_order_items"] = merge("fact_order_items", items)
     result["fact_payments"] = merge("fact_payments", payments(ctx, snapshot, current))
     result["fact_reviews"] = merge("fact_reviews", reviews(ctx, current))
     result["fact_order_events"] = merge("fact_order_events", events)  # last: it holds the mark

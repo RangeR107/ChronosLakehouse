@@ -13,6 +13,15 @@ rerunning any day gives identical output." Both are true:
 - The same test runs the first, a middle and the last day twice. The second run writes nothing,
   and every bronze, silver and gold table has the same row count and content hash.
 
+## Truth test, last passed
+
+| Run | Date | Code | Result |
+| --- | --- | --- | --- |
+| Real slice, no defects (the Phase 1 test, before Phase 2 turned defects on) | 23 Nov 2026 | working tree on top of `163f1f9` | passed in the full suite (101 passed) |
+
+From Phase 2 on, the same test runs with defects on; see `docs/phase-2-notes.md`. Run it with
+`make truth`.
+
 ## What was built
 
 The pipeline is one function per Airflow task, each taking `(ctx, business_date)`.

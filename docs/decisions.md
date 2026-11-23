@@ -182,7 +182,8 @@ before the phase that depends on it).
 
 ## 2026-11-22 · Tests split between CI (fixtures) and local runs (Olist data)
 
-- **Status:** proposed (the owner asked for the split; this is how it would work)
+- **Status:** agreed (owner, 23 Nov 2026). The real-slice truth test is one command,
+  `make truth`, and each phase's notes record when it last passed.
 - **Problem:** GitHub Actions can't see `data/raw/olist/`, which is never committed. The spec
   says CI runs the truth test on a 60-day slice, which needs the real files.
 - **Proposal:**
@@ -629,7 +630,7 @@ before the phase that depends on it).
 
 ## 2026-11-23 · Phase 2: what the pipeline does with each defect
 
-- **Status:** proposed
+- **Status:** agreed (owner, 23 Nov 2026), with the additions in the next entry
 - **Late files:** `register_files` also checks the previous 10 dates' markers for listed files
   not yet loaded. A bronze row's `business_date` is its file's folder, read from the path; its
   `ingested_at` is the run that received it. Missing and unlisted files are reported as paths,
@@ -671,3 +672,48 @@ before the phase that depends on it).
   as that date knew them. `depends_on_past` stops it from running early, not from running at
   all. To decide in Phase 3, with releases: a rerun of an old date should probably republish
   nothing.
+
+## 2026-11-23 · The four Phase 2 spec mismatches, settled
+
+- **Status:** agreed (owner, 23 Nov 2026: "Accept all four recommendations, with these
+  additions")
+- **1. Scenario 5, seller re-keying.**
+  - Customers: no fact rewrite. The placeholder has the real row's key.
+  - Sellers: `fact_order_items.seller_geography_key` is rewritten when a placeholder seller
+    becomes real, and the rewrite goes through the dirty-period list.
+  - `dirty_periods` now covers changed item rows too: each changed item dirties question 3's
+    shipping-limit month, before and after the change, as `metrics.yml` defines. Question 3's
+    aggregate comes later; its dirty months are recorded from now on.
+  - The scenario 5 test asserts that the only existing rows that change are that seller's
+    items, and that question 3's month is dirty for that run.
+- **2. Scenario 8, "main unchanged".** Phase 2 tests that serving is unchanged and that the
+  rerun finishes identical to an uninterrupted run.
+  - `test_8_a_crash_halfway_leaves_main_unchanged` asserts gold is unchanged after the crash.
+    It is marked `xfail(strict=True)` with the reason, so it fails loudly once branches make it
+    pass, and someone has to remove the marker.
+  - It is part of Phase 3's "Done when". The crash day moved to 15 Jan: on 12 Jan nothing
+    changed, so the xfail passed by accident (caught by `strict`).
+- **3. Scenario 9.**
+  - Tested as a catch-up after a 4-day gap.
+  - The serial Airflow backfill was checked by hand on 7 dates. The run list from Airflow's
+    metadata database is in `docs/phase-2-notes.md`.
+- **4. CI and local test split.** Accepted (entry of 22 Nov):
+  - CI runs the fixture truth test with heavy defects.
+  - `make truth` runs the real slice locally.
+  - Each phase's notes have a "Truth test, last passed" table. `Makefile` is new; the owner
+    asked for `make truth`.
+- **5. Rerunning an already-published date.**
+  - It republishes nothing. It logs "already published in release X" and exits successfully,
+    without blocking.
+  - Logic bugs are fixed by a full rebuild: keep bronze, reset silver and gold, and replay every
+    date in order.
+  - Documented in `docs/runbook.md`. The rebuild is tested
+    (`test_a_full_rebuild_from_bronze_gives_the_same_tables`): from a copy of a defected run's
+    bronze it gives exactly the clean run's business tables.
+  - The skip itself is built in Phase 3, because it needs the release manifest to know what was
+    published.
+- **Spec sections changed:**
+  - Late-arriving data (scenarios 5, 8 and 9)
+  - Testing and evaluation (CI and local)
+  - Orchestration (reruns and rebuilds)
+  - Phased build plan (Phase 2 and 3 "Done when")

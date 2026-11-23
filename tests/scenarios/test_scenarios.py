@@ -39,7 +39,7 @@ from jobs.run_day import run_day
 
 MINI = Path(__file__).resolve().parents[1] / "fixtures" / "olist_mini"
 START, FEED_END, END = date(2017, 1, 1), date(2017, 1, 15), date(2017, 1, 18)
-CRASH_DAY = date(2017, 1, 12)
+CRASH_DAY = date(2017, 1, 15)  # the late delivery lands: the snapshot changes
 SKIPPED = {date(2017, 1, 6) + timedelta(days=n) for n in range(4)}  # 6 to 9 Jan: no runs
 
 DEFECTS = Defects.only({
@@ -125,6 +125,7 @@ def pipeline(spark, tmp, name, defects, runs, crash_on=None):
 def crash(ctx, conn, d):
     """Run the day with build_facts dying after its first fact table; report what was seen."""
     served_before = conn.execute("SELECT run_id FROM serving.load_state").fetchone()[0]
+    gold_before = {k: v for k, v in checksums(ctx).items() if k.startswith("gold.")}
     real = build_facts_module.merge_changed
     calls = []
 
@@ -142,7 +143,8 @@ def crash(ctx, conn, d):
         build_facts_module.merge_changed = real
     return {"served_before": served_before,
             "served_after": conn.execute("SELECT run_id FROM serving.load_state").fetchone()[0],
-            "tables_written": calls}
+            "tables_written": calls, "gold_before": gold_before,
+            "gold_after": {k: v for k, v in checksums(ctx).items() if k.startswith("gold.")}}
 
 
 def days(first=START, last=END):
@@ -189,13 +191,17 @@ def test_1_duplicates_are_dropped(clean, defected):
 
 
 def test_2_late_milestone_fills_the_row_when_it_lands(defected):
-    _, log = defected
+    ctx, log = defected
     on_12, on_15 = log["days"][date(2017, 1, 12)], log["days"][date(2017, 1, 15)]
     assert on_12["fulfillment"]["o_delivered"]["is_open"]  # happened on 12 Jan, not known yet
     assert on_15["fulfillment"]["o_delivered"]["final_status"] == "delivered"
     assert str(on_15["fulfillment"]["o_delivered"]["order_delivered_customer_date"]) == (
         "2017-01-12 09:05:00")
-    assert log["results"][date(2017, 1, 15)]["facts"]["dirty_periods"] > 0
+    # January is dirty for the run that received it. (Read from the table: on 15 Jan the first
+    # attempt crashed after recording it, so the rerun rightly recorded nothing new.)
+    dirty = {(r.metric_id, str(r.period_start)) for r in table(ctx, "dirty_periods")
+             .where("run_id = 'run_2017-01-15'").collect()}
+    assert ("q1_late_delivery_rate", "2017-01-01") in dirty
 
 
 def test_3_out_of_order_arrival_gives_the_same_row(clean, defected):
@@ -223,24 +229,36 @@ def test_4_a_correction_is_the_next_version_and_wins(defected):
     assert "payment_mismatch" not in log["days"][END]["fulfillment"]["o_undated"]["dq_flags"]
 
 
-def test_5_early_arriving_facts_use_inferred_members(defected):
+def test_5_early_arriving_customer_uses_an_inferred_member(defected):
     _, log = defected
-    jan5, jan8 = log["days"][date(2017, 1, 6)], log["days"][END]
+    early, final = log["days"][date(2017, 1, 6)], log["days"][END]
     key = surrogate_key_py("person_d", "2017-01-06 13:00:00")
-    early = jan5["customers"][key]
-    assert early["is_inferred"] and early["customer_city"] is None
-    late = jan8["customers"][key]
-    assert not late["is_inferred"] and late["customer_city"] == "salvador"
-    # The fact never moved: same key before and after the real row arrived.
-    assert jan5["fulfillment"]["o_unavailable"]["customer_key"] == key
-    assert jan8["fulfillment"]["o_unavailable"]["customer_key"] == key
-    # The held-back seller: a placeholder first, then the real row; the item is re-keyed to the
-    # seller's location once it is known.
-    assert jan5["sellers"]["s_1"]["is_inferred"]
-    assert jan5["items"][("o_delivered", 1)]["seller_geography_key"] is None
-    assert not jan8["sellers"]["s_1"]["is_inferred"]
-    assert jan8["items"][("o_delivered", 1)]["seller_geography_key"] == surrogate_key_py(
-        "13023", "campinas", "SP")
+    assert early["customers"][key]["is_inferred"]
+    assert early["customers"][key]["customer_city"] is None
+    assert not final["customers"][key]["is_inferred"]
+    assert final["customers"][key]["customer_city"] == "salvador"
+    # No fact rewrite: the placeholder has the key the real row has.
+    assert early["fulfillment"]["o_unavailable"]["customer_key"] == key
+    assert final["fulfillment"]["o_unavailable"]["customer_key"] == key
+
+
+def test_5_early_arriving_seller_rekeys_only_that_sellers_rows(defected):
+    # s_1's master row lands on 7 Jan (two days after its first order). Its items carried no
+    # location until then; on 7 Jan they are re-keyed, through the dirty-period list.
+    ctx, log = defected
+    before, after = log["days"][date(2017, 1, 6)], log["days"][date(2017, 1, 7)]
+    assert before["sellers"]["s_1"]["is_inferred"] and not after["sellers"]["s_1"]["is_inferred"]
+    s_1 = surrogate_key_py("s_1")
+    changed = {k for k in before["items"] if after["items"][k] != before["items"][k]}
+    assert changed and {after["items"][k]["seller_key"] for k in changed} == {s_1}
+    assert changed == {k for k, row in before["items"].items() if row["seller_key"] == s_1}
+    for k in changed:
+        assert before["items"][k]["seller_geography_key"] is None
+        assert after["items"][k]["seller_geography_key"] == surrogate_key_py(
+            "13023", "campinas", "SP")
+    dirty = {(r.metric_id, str(r.period_start)) for r in table(ctx, "dirty_periods")
+             .where("run_id = 'run_2017-01-07'").collect()}
+    assert ("q3_seller_handover", "2017-01-01") in dirty  # the items' shipping-limit month
 
 
 def test_6_late_dimension_change_rekeys_only_that_persons_facts(defected):
@@ -281,10 +299,20 @@ def test_8_a_crash_halfway_leaves_serving_alone_and_the_rerun_finishes(clean, de
     _, log = defected
     crash_ = log["crash"]
     assert crash_["tables_written"][-1].endswith("fact_order_items")
-    assert crash_["served_before"] == crash_["served_after"] == "run_2017-01-11"
-    assert log["days"][CRASH_DAY]["served"] == "run_2017-01-12"
+    assert crash_["served_before"] == crash_["served_after"] == "run_2017-01-14"
+    assert log["days"][CRASH_DAY]["served"] == "run_2017-01-15"
     # The rerun after the crash ends the day exactly where an uninterrupted run would have.
     assert log["days"][CRASH_DAY]["items"] == clean[1]["days"][CRASH_DAY]["items"]
+
+
+@pytest.mark.xfail(strict=True, reason=(
+    "Needs Phase 3's write-audit-publish branches: until runs write to run_<id> branches, a "
+    "crash leaves gold's main partly written. Part of Phase 3's Done when."))
+def test_8_a_crash_halfway_leaves_main_unchanged(defected):
+    crash_ = defected[1]["crash"]
+    # Guard: the crash day must have had something to write, or this could pass by accident.
+    assert crash_["tables_written"][-1].endswith("fact_order_items")
+    assert crash_["gold_after"] == crash_["gold_before"]
 
 
 def test_9_catching_up_after_a_gap_gives_the_same_tables(clean, catch_up):
@@ -298,3 +326,21 @@ def test_the_late_file_was_reported_then_loaded(defected):
     assert late in on_6["missing"]
     assert late not in on_7["missing"]
 
+
+
+def test_a_full_rebuild_from_bronze_gives_the_same_tables(spark, clean, defected):
+    """The runbook's fix for a logic bug: keep bronze, reset silver and gold, and run every date
+    again in order. Done here in a fresh namespace holding a copy of the defected run's bronze,
+    so the other tests' tables are untouched."""
+    ctx, _ = defected
+    rebuilt = Context(spark, ctx.landing_dir, namespace_prefix=f"rebuild{uuid.uuid4().hex[:6]}_",
+                      source_conninfo=ctx.source_conninfo, reference_dir=MINI)
+    spark.sql(f"CREATE NAMESPACE IF NOT EXISTS {rebuilt.namespace('bronze')}")
+    for t in spark.sql(f"SHOW TABLES IN {ctx.namespace('bronze')}").collect():
+        spark.sql(f"CREATE TABLE {rebuilt.table('bronze', t.tableName)} USING iceberg "
+                  f"TBLPROPERTIES ('format-version' = '2') "
+                  f"AS SELECT * FROM {ctx.table('bronze', t.tableName)}")
+    for d in sorted(days()):
+        result = run_day(rebuilt, d)
+        assert result["files"] == 0 and result["events"] == 0  # bronze already has everything
+    assert_same_business_tables(clean[0], rebuilt)
