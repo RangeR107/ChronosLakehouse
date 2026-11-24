@@ -33,6 +33,11 @@ def build_session(warehouse: str, app_name: str = "chronos", shuffle_partitions:
         .config(f"spark.sql.catalog.{CATALOG}", "org.apache.iceberg.spark.SparkCatalog")
         .config(f"spark.sql.catalog.{CATALOG}.type", "hadoop")
         .config(f"spark.sql.catalog.{CATALOG}.warehouse", warehouse)
+        # No table cache: a cached table keeps its metadata, so a commit made by another session
+        # or process (a branch, a fast-forward, maintenance) stays invisible to this one. That is
+        # the likely cause of the publish that missed its run branch (docs/decisions.md). Every
+        # read loads the table's current metadata instead; at our sizes that costs little.
+        .config(f"spark.sql.catalog.{CATALOG}.cache-enabled", "false")
         # The data is small (about 10,000 events a day at most); 200 default shuffle partitions
         # would mostly be empty tasks.
         .config("spark.sql.shuffle.partitions", str(shuffle_partitions))
