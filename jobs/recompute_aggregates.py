@@ -17,7 +17,7 @@ from functools import reduce
 from pyspark.sql import DataFrame, Window
 from pyspark.sql import functions as F
 
-from jobs.context import Context, run_id, run_time
+from jobs.context import Context, on_run_branch, run_id, run_time
 from jobs.merge import create_tables, merge_changed
 
 # Spec: "Reliable window", purchases from 1 Jan 2017 up to (not including) 1 Sep 2018.
@@ -141,6 +141,7 @@ def restatements(ctx: Context) -> DataFrame:
         "restatement", F.col("latest_value") - F.col("first_value"))
 
 
+@on_run_branch
 def recompute_aggregates(ctx: Context, business_date: date) -> dict[str, int]:
     create_tables(ctx, "gold", TABLES)
     name = "agg_delivery_by_month_region"

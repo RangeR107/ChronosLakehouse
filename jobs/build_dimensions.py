@@ -12,7 +12,7 @@ from datetime import date, timedelta
 from pyspark.sql import Column, DataFrame, Window
 from pyspark.sql import functions as F
 
-from jobs.context import Context, run_time
+from jobs.context import Context, on_run_branch, run_time
 from jobs.keys import surrogate_key
 from jobs.merge import create_tables, merge_changed
 
@@ -96,6 +96,11 @@ def customer_versions(ctx: Context, business_date: date) -> DataFrame:
     placeholder: is_inferred, no address, effective from their first order. That is exactly the
     key the real row will have, so when it arrives it overwrites the placeholder in place and the
     facts pointing at it stay attached (spec: Data model, "Inferred members").
+
+    The real row can also start later than the first order: the address changed again before
+    the row reached the master. Then the placeholder stays, for the gap only, and the chain
+    closes it where the real row starts. Without it the old placeholder row stayed current next
+    to the real one, and the person's later orders matched both (docs/decisions.md).
     """
     rows = known_by(ctx, "customers_extract", business_date).select(
         "customer_unique_id", "customer_zip_code_prefix", "customer_city", "customer_state",
@@ -104,8 +109,10 @@ def customer_versions(ctx: Context, business_date: date) -> DataFrame:
     ordered = (ctx.spark.table(ctx.table("silver", "orders"))
                .groupBy("customer_unique_id")
                .agg(F.min("order_purchase_timestamp").alias("effective_from")))
-    inferred = ordered.join(rows.select("customer_unique_id"), "customer_unique_id",
-                            "left_anti").select(
+    first_known = rows.groupBy("customer_unique_id").agg(
+        F.min("effective_from").alias("first_known"))
+    inferred = ordered.join(first_known, "customer_unique_id", "left").where(
+        F.col("first_known").isNull() | (F.col("effective_from") < F.col("first_known"))).select(
         "customer_unique_id", *(F.lit(None).cast("string").alias(c) for c in (
             "customer_zip_code_prefix", "customer_city", "customer_state")),
         "effective_from", F.lit(True).alias("is_inferred"))
@@ -186,6 +193,7 @@ def merge_dimension(ctx: Context, name: str, rows: DataFrame) -> int:
     return merge_changed(ctx, ctx.table("gold", name), rows, [KEYS[name]])
 
 
+@on_run_branch
 def build_dimensions(ctx: Context, business_date: date) -> dict[str, int]:
     """Rows inserted or updated per dimension."""
     ensure_gold_tables(ctx)

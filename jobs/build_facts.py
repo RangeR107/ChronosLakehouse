@@ -5,9 +5,9 @@ Each run rebuilds only the orders touched by events silver received since gold l
 order's whole row is derived again from all of its current events, so a late milestone fills its
 column whatever order events arrived in, and nothing depends on the arrival sequence.
 
-"Since gold last looked" is the latest ingested_at in fact_order_events, which is written last,
-the same crash rule as silver: a run that dies midway leaves the mark where it was, and the rerun
-rebuilds the same orders and merges only what is missing.
+"Since gold last looked" means silver events fact_order_events doesn't hold yet. The ledger is
+written last, the same crash rule as silver: a run that dies midway leaves the ledger as it was,
+and the rerun rebuilds the same orders and merges only what is missing.
 """
 from datetime import date
 
@@ -15,7 +15,7 @@ from pyspark.sql import Column, DataFrame, Window
 from pyspark.sql import functions as F
 
 from jobs.build_dimensions import geography_key
-from jobs.context import Context, run_id, run_time
+from jobs.context import Context, on_run_branch, run_id, run_time
 from jobs.keys import surrogate_key
 from jobs.merge import changed_rows, create_tables, merge_changed
 
@@ -90,16 +90,16 @@ def flags(*pairs: tuple[str, Column]) -> Column:
 
 
 def touched_orders(ctx: Context, business_date: date) -> DataFrame:
-    """Orders with events silver received after the ledger's mark, up to this run's replay time."""
-    mark = ctx.spark.sql(
-        f"SELECT max(ingested_at) FROM {ctx.table('gold', 'fact_order_events')}").collect()[0][0]
+    """Orders with silver events the ledger doesn't have yet, up to this run's replay time.
+
+    By event_id, not by a time mark: a batch released after a block is older than events
+    already in the ledger, and a "newer than the latest ingested_at" rule would skip it for good
+    (docs/decisions.md, 2026-11-24).
+    """
     upper = F.lit(run_time(business_date).isoformat(sep=" ")).cast(TS)
     events = ctx.spark.table(ctx.table("silver", "events")).where(F.col("ingested_at") <= upper)
-    if mark is not None:
-        # As text, cast back to NTZ: F.lit() of a Python datetime would shift it through the
-        # local time zone, and the mark would no longer equal the time it came from.
-        events = events.where(F.col("ingested_at") > F.lit(mark.isoformat(sep=" ")).cast(TS))
-    return events.select("order_id").distinct()
+    seen = ctx.spark.table(ctx.table("gold", "fact_order_events")).select("event_id")
+    return events.join(seen, "event_id", "left_anti").select("order_id").distinct()
 
 
 def stale_orders(ctx: Context) -> DataFrame:
@@ -319,6 +319,7 @@ def reviews(ctx: Context, current: DataFrame) -> DataFrame:
         (F.row_number().over(pick) == 1).alias("is_order_review"))
 
 
+@on_run_branch
 def build_facts(ctx: Context, business_date: date) -> dict[str, int]:
     """Rows inserted or updated per fact table, plus how many orders were rebuilt."""
     ensure_fact_tables(ctx)

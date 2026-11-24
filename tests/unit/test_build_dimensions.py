@@ -155,3 +155,25 @@ def test_calendar_marks_black_friday(ctx):
     row = ctx.spark.sql(f"""SELECT date_key, weekday, quarter, sale_day FROM {ctx.table('gold', 'dim_date')}
                             WHERE date = DATE'2017-11-24'""").collect()[0]
     assert tuple(row) == (20171124, "Friday", 4, "black_friday")
+
+
+def add_order(ctx, person, purchased_at):
+    ctx.spark.sql(f"""INSERT INTO {ctx.table('silver', 'orders')} VALUES
+        ('e_{person}', 'o_{person}', 'c_{person}', '{person}', '80010', 'curitiba', 'PR',
+         TIMESTAMP_NTZ '{purchased_at}', TIMESTAMP_NTZ '2017-02-01 00:00:00', 1)""")
+
+
+def test_a_late_customer_row_that_starts_after_the_first_order_closes_the_placeholder(ctx):
+    # p1 orders on 5 Jan before the master has them: an inferred placeholder, current.
+    add_order(ctx, "p1", "2017-01-05 10:15:00")
+    build_dimensions(ctx, date(2017, 1, 5))
+    assert [(v[1], v[2], v[3], v[4]) for v in versions(ctx)] == [
+        (None, "2017-01-05 10:15:00", None, True)]
+    # Their row arrives with an address first used on 7 Jan (it changed again meanwhile). The
+    # placeholder covers 5 to 7 Jan and is closed; only the real row is current.
+    add_customers(ctx, ("p1", "80010", "curitiba", "PR", "2017-01-07 09:00:00",
+                        "2017-01-07 09:00:00"), extracted_at="2017-01-08 00:00:00")
+    build_dimensions(ctx, date(2017, 1, 7))
+    assert [(v[1], v[2], v[3], v[4]) for v in versions(ctx)] == [
+        (None, "2017-01-05 10:15:00", "2017-01-07 09:00:00", False),
+        ("curitiba", "2017-01-07 09:00:00", None, True)]

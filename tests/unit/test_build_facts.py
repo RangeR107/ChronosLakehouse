@@ -23,6 +23,7 @@ from jobs.keys import surrogate_key_py
 from jobs.land_to_bronze import land_to_bronze, register_files, wait_for_landing
 from jobs.load_serving import load_serving
 from jobs.recompute_aggregates import recompute_aggregates
+from sentinel.release import open_run, publish_release
 
 MINI = Path(__file__).parent.parent / "fixtures" / "olist_mini"
 FIRST, LAST = date(2017, 1, 1), date(2017, 1, 15)
@@ -168,10 +169,12 @@ def test_aggregate_late_rate_by_region(ctx):
 
 @pytest.mark.postgres
 def test_load_serving_replaces_in_one_transaction(ctx, source_db):
-    run_through(ctx, LAST)
-    recompute_aggregates(ctx, LAST)
     served = Context(ctx.spark, ctx.landing_dir, ctx.namespace_prefix,
-                     source_conninfo=conninfo(source_db.info.dbname))
+                     source_conninfo=conninfo(source_db.info.dbname), reference_dir=MINI)
+    open_run(served, LAST)  # the steps below write to the run's branch
+    run_through(served, LAST)
+    recompute_aggregates(served, LAST)
+    publish_release(served, LAST)  # the audit is tested elsewhere
     source_db.execute("CREATE SCHEMA serving")
     source_db.execute("CREATE TABLE serving.delivery_by_month_region (delivery_month text,"
                       " region text, delivered_orders bigint, late_orders bigint,"
@@ -187,8 +190,13 @@ def test_load_serving_replaces_in_one_transaction(ctx, source_db):
     got = source_db.execute("SELECT delivery_month, region, delivered_orders"
                             " FROM serving.delivery_by_month_region").fetchall()
     assert set(got) == {("2017-01", "Southeast", 1), ("2017-01", "all", 1)}
-    state = source_db.execute("SELECT run_id, business_date FROM serving.load_state").fetchone()
-    assert state == ("run_2017-01-15", LAST)
+    state = source_db.execute("SELECT run_id, business_date, release_id"
+                              " FROM serving.load_state").fetchone()
+    assert state == ("run_2017-01-15", LAST, "release_2017-01-15")
+    # The dashboards never go back to an older release.
+    source_db.execute("UPDATE serving.load_state SET business_date = '2017-01-20'")
+    source_db.commit()
+    assert "skipped" in load_serving(served, LAST)
 
 
 def test_aggregate_row_goes_when_its_only_order_is_cancelled(ctx):

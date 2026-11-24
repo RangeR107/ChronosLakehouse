@@ -33,7 +33,7 @@ from generator.defects import (
 )
 from generator.replay import replay
 from generator.source_db import conninfo
-from jobs.context import Context
+from jobs.context import Context, release_id
 from jobs.keys import surrogate_key_py
 from jobs.run_day import run_day
 
@@ -292,7 +292,7 @@ def test_7_rerunning_any_day_changes_nothing(defected):
     assert set(log["retries"]) == days()
     for d, (before, after, again) in log["retries"].items():
         assert after == before, d
-        assert again["files"] == 0 and again["events"] == 0, d
+        assert again["already_published"] == release_id(d), d
 
 
 def test_8_a_crash_halfway_leaves_serving_alone_and_the_rerun_finishes(clean, defected):
@@ -305,10 +305,8 @@ def test_8_a_crash_halfway_leaves_serving_alone_and_the_rerun_finishes(clean, de
     assert log["days"][CRASH_DAY]["items"] == clean[1]["days"][CRASH_DAY]["items"]
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "Needs Phase 3's write-audit-publish branches: until runs write to run_<id> branches, a "
-    "crash leaves gold's main partly written. Part of Phase 3's Done when."))
 def test_8_a_crash_halfway_leaves_main_unchanged(defected):
+    # Phase 3: the crashed run wrote only to its branch, so main didn't move.
     crash_ = defected[1]["crash"]
     # Guard: the crash day must have had something to write, or this could pass by accident.
     assert crash_["tables_written"][-1].endswith("fact_order_items")
