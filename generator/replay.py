@@ -13,12 +13,14 @@ import argparse
 import json
 from collections import defaultdict
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
 
 import psycopg
 
+from generator.anomalies import Anomalies, DayAnomaly
+from generator.anomalies import apply as apply_anomaly
 from generator.defects import (
     LATE_FILE,
     Defects,
@@ -27,8 +29,15 @@ from generator.defects import (
     inject_events,
     is_late_file,
     master_writes,
+    schema_changes,
 )
-from generator.landing import business_date, by_business_date, write_day, write_late_files
+from generator.landing import (
+    business_date,
+    by_business_date,
+    write_day,
+    write_duplicate,
+    write_late_files,
+)
 from generator.olist import build_events, load
 from generator.source_db import (
     apply_schema,
@@ -76,9 +85,12 @@ class Feed:
     writes: dict[str, list[MasterWrite]]
     held: set[str]
     notes: list[dict]
+    # Evaluation replay only: business date -> what its irreversible anomaly changes.
+    anomalies: dict[str, DayAnomaly] = field(default_factory=dict)
 
 
-def plan(data: dict, purchased_from: date | None, feed_end: date, defects: Defects) -> Feed:
+def plan(data: dict, purchased_from: date | None, feed_end: date, defects: Defects,
+         anomalies: Anomalies | None = None) -> Feed:
     cut = f"{purchased_from} 00:00:00" if purchased_from else None
     # Drain: nothing new is emitted after the last business date; only delayed arrivals land.
     natural = [e for e in build_events(data, cut) if business_date(e) <= feed_end.isoformat()]
@@ -89,6 +101,9 @@ def plan(data: dict, purchased_from: date | None, feed_end: date, defects: Defec
     # Only a seller that gets a delayed insert is held back; one no order in this replay names
     # is loaded at the start like the rest, or it would never reach the master at all.
     held = {w.row["seller_id"] for w in writes if w.kind == "seller"}
+    events, schema_notes = schema_changes(
+        events, defects, {p["product_id"]: p["product_category_name"] for p in data["products"]})
+    notes += schema_notes
     days = by_business_date(events)
     late_hours = {}
     for day, day_events in days.items():
@@ -100,7 +115,13 @@ def plan(data: dict, purchased_from: date | None, feed_end: date, defects: Defec
     by_day = defaultdict(list)
     for w in writes:
         by_day[w.at[:10]].append(w)
-    return Feed(days, late_hours, dict(by_day), held, notes + write_notes)
+    planned = {}
+    if anomalies is not None:
+        for day, kind in sorted(anomalies.schedule().items()):
+            if day <= feed_end.isoformat():
+                planned[day] = apply_anomaly(anomalies, kind, day, days.get(day, []))
+                notes.append(planned[day].note)
+    return Feed(days, late_hours, dict(by_day), held, notes + write_notes, planned)
 
 
 def write_manifest(path: Path, feed: Feed, defects: Defects) -> None:
@@ -114,7 +135,8 @@ def write_manifest(path: Path, feed: Feed, defects: Defects) -> None:
 def replay(olist_dir: Path, landing_dir: Path, start: date, end: date,
            purchased_from: date | None = None, conn: psycopg.Connection | None = None,
            after_day: Callable[[date], None] | None = None, defects: Defects | None = None,
-           feed_end: date | None = None, manifest: Path | None = None) -> list[dict]:
+           feed_end: date | None = None, manifest: Path | None = None,
+           anomalies: Anomalies | None = None) -> list[dict]:
     """Write each business date's files and master rows, in date order.
 
     after_day, if given, is called once each date is fully written. The source database only
@@ -125,10 +147,13 @@ def replay(olist_dir: Path, landing_dir: Path, start: date, end: date,
     defects: None is the Phase 1 feed (no defects). feed_end is the last business date with new
     events; dates after it up to `end` are the drain period. The feed is worked out in full
     every call, so replaying one date at a time gives the same files as one long replay.
+
+    anomalies: the evaluation replay's irreversible anomalies (generator/anomalies.py). Never
+    pass them to a truth replay: they are not reversed, so business tables would differ.
     """
     data = load(olist_dir)
     d = defects or Defects.only({})
-    feed = plan(data, purchased_from, feed_end or end, d)
+    feed = plan(data, purchased_from, feed_end or end, d, anomalies)
     if manifest is not None:
         write_manifest(manifest, feed, d)
     if conn is not None:
@@ -138,9 +163,18 @@ def replay(olist_dir: Path, landing_dir: Path, start: date, end: date,
     for day in dates(start, end):
         previous = (date.fromisoformat(day) - timedelta(days=1)).isoformat()
         if previous in feed.late_hours:
-            write_late_files(feed.days[previous], landing_dir, previous, feed.late_hours[previous])
-        markers.append(write_day(feed.days.get(day, []), landing_dir, day,
-                                 feed.late_hours.get(day, frozenset())))
+            # An anomaly day's late file must carry the anomaly's events too: its marker was
+            # written from them, and a different file would fail the checksum.
+            sent = feed.anomalies[previous].events if previous in feed.anomalies \
+                else feed.days[previous]
+            write_late_files(sent, landing_dir, previous, feed.late_hours[previous])
+        events, late = feed.days.get(day, []), feed.late_hours.get(day, frozenset())
+        odd = feed.anomalies.get(day)
+        if odd is not None:
+            events, late = odd.events, late | odd.never_hours
+        markers.append(write_day(events, landing_dir, day, late))
+        if odd is not None and odd.duplicate_hour is not None:
+            write_duplicate(events, landing_dir, day, odd.duplicate_hour)
         if conn is not None:
             apply_writes(conn, feed.writes.get(day, []))
         if after_day is not None:

@@ -1,0 +1,3189 @@
+{
+ "period": "test",
+ "from": "2017-10-01",
+ "to": "2018-08-31",
+ "scoring": "re-scored post-hoc with today's warm-up rule",
+ "matrix": {
+  "missing_files": {
+   "warned": 30
+  },
+  "clean": {
+   "passed": 130,
+   "warned": 17,
+   "blocked": 8
+  },
+  "duplicate_file": {
+   "blocked": 30
+  },
+  "volume_spike": {
+   "blocked": 23,
+   "warned": 7
+  },
+  "mix_shift": {
+   "blocked": 30
+  },
+  "schema_break": {
+   "blocked": 30
+  },
+  "null_burst": {
+   "blocked": 26,
+   "passed": 3,
+   "warned": 1
+  }
+ },
+ "per_type": {
+  "missing_files": {
+   "injected": 30,
+   "detected": 30,
+   "detection_rate": 1.0,
+   "blocked": 0,
+   "mean_runs_to_detection": 0.0,
+   "published": 30,
+   "published_with_bad_data": null,
+   "published_incomplete": 30
+  },
+  "duplicate_file": {
+   "injected": 30,
+   "detected": 30,
+   "detection_rate": 1.0,
+   "blocked": 30,
+   "mean_runs_to_detection": 0.0,
+   "published": 0,
+   "published_with_bad_data": 0,
+   "published_incomplete": 0
+  },
+  "volume_spike": {
+   "injected": 30,
+   "detected": 30,
+   "detection_rate": 1.0,
+   "blocked": 23,
+   "mean_runs_to_detection": 0.0,
+   "published": 7,
+   "published_with_bad_data": 7,
+   "published_incomplete": 1
+  },
+  "mix_shift": {
+   "injected": 30,
+   "detected": 30,
+   "detection_rate": 1.0,
+   "blocked": 30,
+   "mean_runs_to_detection": 0.0,
+   "published": 0,
+   "published_with_bad_data": 0,
+   "published_incomplete": 0
+  },
+  "schema_break": {
+   "injected": 30,
+   "detected": 30,
+   "detection_rate": 1.0,
+   "blocked": 30,
+   "mean_runs_to_detection": 0.0,
+   "published": 0,
+   "published_with_bad_data": 0,
+   "published_incomplete": 0
+  },
+  "null_burst": {
+   "injected": 30,
+   "detected": 25,
+   "detection_rate": 0.833,
+   "blocked": 26,
+   "mean_runs_to_detection": 0.0,
+   "published": 4,
+   "published_with_bad_data": 4,
+   "published_incomplete": 0
+  }
+ },
+ "clean_days": 155,
+ "false_blocks": 8,
+ "false_block_rate": 0.052,
+ "false_warnings": 17,
+ "checks_firing": {
+  "completeness:missing_after_2_days": {
+   "duplicate_file": 7,
+   "volume_spike": 12
+  },
+  "completeness:missing_files": {
+   "missing_files": 30,
+   "duplicate_file": 2,
+   "null_burst": 1
+  },
+  "completeness:unlisted_files": {
+   "duplicate_file": 30
+  },
+  "drift": {
+   "mix_shift": 31,
+   "duplicate_file": 2,
+   "clean": 4,
+   "missing_files": 3,
+   "null_burst": 2
+  },
+  "freshness": {
+   "missing_files": 6,
+   "mix_shift": 4,
+   "clean": 14,
+   "schema_break": 5,
+   "null_burst": 2,
+   "duplicate_file": 2,
+   "volume_spike": 3
+  },
+  "known_defect:carrier_before_approval": {
+   "mix_shift": 2,
+   "clean": 2,
+   "schema_break": 1
+  },
+  "known_defect:carrier_before_purchase": {
+   "clean": 1
+  },
+  "known_defect:no_items": {
+   "duplicate_file": 1,
+   "volume_spike": 1,
+   "clean": 2,
+   "null_burst": 1
+  },
+  "known_defect:payment_mismatch": {
+   "null_burst": 1
+  },
+  "schema_contract:new_optional_field": {
+   "schema_break": 23
+  },
+  "schema_contract:quarantine_share": {
+   "schema_break": 30,
+   "null_burst": 25
+  },
+  "volume": {
+   "volume_spike": 30,
+   "schema_break": 10,
+   "clean": 4,
+   "mix_shift": 2,
+   "null_burst": 1,
+   "duplicate_file": 1
+  }
+ },
+ "days": [
+  {
+   "date": "2017-10-01",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files",
+    "freshness"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-10-02",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-10-03",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:missing_after_2_days",
+    "completeness:unlisted_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-10-04",
+   "type": "volume_spike",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-10-05",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:payment_type",
+    "freshness"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-10-06",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-10-07",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-10-08",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-10-09",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-10-10",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-10-11",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-10-12",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:unlisted_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-10-13",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-10-14",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-10-15",
+   "type": "volume_spike",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-10-16",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-10-17",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-10-18",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-10-19",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-10-20",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:payment_type"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-10-21",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-10-22",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-10-23",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-10-24",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-10-25",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-10-26",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-10-27",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-10-28",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-10-29",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-10-30",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-10-31",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-11-01",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:unlisted_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-11-02",
+   "type": "clean",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "freshness"
+   ]
+  },
+  {
+   "date": "2017-11-03",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-11-04",
+   "type": "volume_spike",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-11-05",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-11-06",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:payment_type",
+    "freshness"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-11-07",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-11-08",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-11-09",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-11-10",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-11-11",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:missing_files",
+    "completeness:unlisted_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-11-12",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-11-13",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-11-14",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-11-15",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-11-16",
+   "type": "volume_spike",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-11-17",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-11-18",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:payment_type"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-11-19",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "freshness",
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-11-20",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "freshness",
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-11-21",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-11-22",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:unlisted_files",
+    "drift:payment_type"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-11-23",
+   "type": "volume_spike",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:missing_after_2_days",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-11-24",
+   "type": "clean",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "volume"
+   ]
+  },
+  {
+   "date": "2017-11-25",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:price",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-11-26",
+   "type": "clean",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "volume"
+   ]
+  },
+  {
+   "date": "2017-11-27",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-11-28",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-11-29",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-11-30",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:unlisted_files",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-12-01",
+   "type": "volume_spike",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:missing_after_2_days",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-12-02",
+   "type": "clean",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "volume"
+   ]
+  },
+  {
+   "date": "2017-12-03",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:price",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-12-04",
+   "type": "clean",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:payment_type",
+    "volume"
+   ]
+  },
+  {
+   "date": "2017-12-05",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-12-06",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-12-07",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-12-08",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-12-09",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-12-10",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-12-11",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-12-12",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-12-13",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:unlisted_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-12-14",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-12-15",
+   "type": "volume_spike",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-12-16",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-12-17",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:price"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-12-18",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-12-19",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:missing_files",
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-12-20",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-12-21",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-12-22",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:unlisted_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-12-23",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-12-24",
+   "type": "clean",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "freshness"
+   ]
+  },
+  {
+   "date": "2017-12-25",
+   "type": "clean",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "freshness"
+   ]
+  },
+  {
+   "date": "2017-12-26",
+   "type": "volume_spike",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-12-27",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-12-28",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:price"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2017-12-29",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-12-30",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2017-12-31",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "freshness",
+    "schema_contract:new_optional_field",
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-01-01",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "known_defect:payment_mismatch",
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-01-02",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-01-03",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-01-04",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:unlisted_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-01-05",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-01-06",
+   "type": "volume_spike",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-01-07",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:payment_type"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-01-08",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:new_optional_field",
+    "schema_contract:quarantine_share",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-01-09",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-01-10",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-01-11",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-01-12",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-01-13",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-01-14",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-01-15",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:missing_after_2_days",
+    "completeness:unlisted_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-01-16",
+   "type": "clean",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "freshness"
+   ]
+  },
+  {
+   "date": "2018-01-17",
+   "type": "volume_spike",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-01-18",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:payment_type"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-01-19",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-01-20",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:new_optional_field",
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-01-21",
+   "type": "clean",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "freshness"
+   ]
+  },
+  {
+   "date": "2018-01-22",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-01-23",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-01-24",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-01-25",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:unlisted_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-01-26",
+   "type": "volume_spike",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:missing_after_2_days",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-01-27",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:price"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-01-28",
+   "type": "clean",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "drift:payment_type"
+   ]
+  },
+  {
+   "date": "2018-01-29",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:new_optional_field",
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-01-30",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-01-31",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-02-01",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-02-02",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-02-03",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-02-04",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:missing_after_2_days",
+    "completeness:unlisted_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-02-05",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-02-06",
+   "type": "volume_spike",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-02-07",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-02-08",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:payment_type"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-02-09",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:new_optional_field",
+    "schema_contract:quarantine_share",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-02-10",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-02-11",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-02-12",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-02-13",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files",
+    "drift:payment_type"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-02-14",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:unlisted_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-02-15",
+   "type": "volume_spike",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_after_2_days",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-02-16",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-02-17",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:payment_type"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-02-18",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "freshness",
+    "schema_contract:new_optional_field",
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-02-19",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-02-20",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-02-21",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-02-22",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-02-23",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-02-24",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-02-25",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:unlisted_files",
+    "freshness"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-02-26",
+   "type": "volume_spike",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_after_2_days",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-02-27",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-02-28",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:price"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-03-01",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-03-02",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:new_optional_field",
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-03-03",
+   "type": "null_burst",
+   "result": "passed",
+   "release": "published",
+   "checks": [],
+   "detected_after_runs": null
+  },
+  {
+   "date": "2018-03-04",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-03-05",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-03-06",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:missing_after_2_days",
+    "completeness:unlisted_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-03-07",
+   "type": "volume_spike",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-03-08",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:payment_type"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-03-09",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-03-10",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-03-11",
+   "type": "clean",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "freshness"
+   ]
+  },
+  {
+   "date": "2018-03-12",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-03-13",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:new_optional_field",
+    "schema_contract:quarantine_share",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-03-14",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-03-15",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-03-16",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-03-17",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:unlisted_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-03-18",
+   "type": "volume_spike",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:missing_after_2_days",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-03-19",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:price"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-03-20",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:new_optional_field",
+    "schema_contract:quarantine_share",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-03-21",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-03-22",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-03-23",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files",
+    "freshness"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-03-24",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:unlisted_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-03-25",
+   "type": "volume_spike",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_after_2_days",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-03-26",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:payment_type"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-03-27",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-03-28",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:new_optional_field",
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-03-29",
+   "type": "clean",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "freshness"
+   ]
+  },
+  {
+   "date": "2018-03-30",
+   "type": "null_burst",
+   "result": "passed",
+   "release": "published",
+   "checks": [],
+   "detected_after_runs": null
+  },
+  {
+   "date": "2018-03-31",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-04-01",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:unlisted_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-04-02",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-04-03",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-04-04",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-04-05",
+   "type": "volume_spike",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-04-06",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:payment_type"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-04-07",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-04-08",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:new_optional_field",
+    "schema_contract:quarantine_share",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-04-09",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-04-10",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-04-11",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-04-12",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-04-13",
+   "type": "clean",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "freshness"
+   ]
+  },
+  {
+   "date": "2018-04-14",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-04-15",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-04-16",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files",
+    "freshness"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-04-17",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:unlisted_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-04-18",
+   "type": "volume_spike",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:missing_after_2_days",
+    "freshness",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-04-19",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:price",
+    "freshness"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-04-20",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:new_optional_field",
+    "schema_contract:quarantine_share",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-04-21",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-04-22",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-04-23",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-04-24",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-04-25",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:unlisted_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-04-26",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-04-27",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-04-28",
+   "type": "volume_spike",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-04-29",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-04-30",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:price",
+    "known_defect:carrier_before_approval"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-05-01",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-05-02",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:new_optional_field",
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-05-03",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-05-04",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-05-05",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-05-06",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-05-07",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-05-08",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:missing_after_2_days",
+    "completeness:unlisted_files",
+    "known_defect:no_items"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-05-09",
+   "type": "volume_spike",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "known_defect:no_items",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-05-10",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-05-11",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-05-12",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-05-13",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-05-14",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-05-15",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-05-16",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:price"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-05-17",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-05-18",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:new_optional_field",
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-05-19",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-05-20",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-05-21",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-05-22",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-05-23",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-05-24",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-05-25",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-05-26",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-05-27",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-05-28",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:unlisted_files",
+    "freshness"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-05-29",
+   "type": "volume_spike",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "freshness",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-05-30",
+   "type": "clean",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "known_defect:carrier_before_approval"
+   ]
+  },
+  {
+   "date": "2018-05-31",
+   "type": "clean",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "freshness"
+   ]
+  },
+  {
+   "date": "2018-06-01",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:price"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-06-02",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-06-03",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:new_optional_field",
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-06-04",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-06-05",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-06-06",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-06-07",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-06-08",
+   "type": "clean",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "freshness"
+   ]
+  },
+  {
+   "date": "2018-06-09",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-06-10",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-06-11",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-06-12",
+   "type": "clean",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "freshness"
+   ]
+  },
+  {
+   "date": "2018-06-13",
+   "type": "clean",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "known_defect:carrier_before_purchase"
+   ]
+  },
+  {
+   "date": "2018-06-14",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-06-15",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-06-16",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-06-17",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files",
+    "freshness"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-06-18",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-06-19",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:missing_after_2_days",
+    "completeness:unlisted_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-06-20",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-06-21",
+   "type": "volume_spike",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-06-22",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-06-23",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:payment_type"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-06-24",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:new_optional_field",
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-06-25",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-06-26",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-06-27",
+   "type": "clean",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "freshness",
+    "known_defect:carrier_before_approval"
+   ]
+  },
+  {
+   "date": "2018-06-28",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-06-29",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:unlisted_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-06-30",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-07-01",
+   "type": "volume_spike",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-07-02",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:payment_type"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-07-03",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-07-04",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-07-05",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "known_defect:carrier_before_approval",
+    "schema_contract:new_optional_field",
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-07-06",
+   "type": "clean",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "freshness"
+   ]
+  },
+  {
+   "date": "2018-07-07",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-07-08",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:payment_type",
+    "freshness",
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-07-09",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-07-10",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-07-11",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:missing_after_2_days",
+    "completeness:unlisted_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-07-12",
+   "type": "clean",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "known_defect:no_items"
+   ]
+  },
+  {
+   "date": "2018-07-13",
+   "type": "volume_spike",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-07-14",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-07-15",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-07-16",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-07-17",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:price"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-07-18",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-07-19",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "freshness",
+    "schema_contract:new_optional_field",
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-07-20",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-07-21",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-07-22",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:unlisted_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-07-23",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-07-24",
+   "type": "volume_spike",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-07-25",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:payment_type"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-07-26",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "freshness",
+    "schema_contract:new_optional_field",
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-07-27",
+   "type": "null_burst",
+   "result": "passed",
+   "release": "published",
+   "checks": [],
+   "detected_after_runs": null
+  },
+  {
+   "date": "2018-07-28",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-07-29",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-07-30",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:missing_files",
+    "completeness:unlisted_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-07-31",
+   "type": "volume_spike",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:missing_after_2_days",
+    "freshness",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-08-01",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:payment_type"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-08-02",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:new_optional_field",
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-08-03",
+   "type": "null_burst",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "drift:payment_type"
+   ],
+   "detected_after_runs": null
+  },
+  {
+   "date": "2018-08-04",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files",
+    "freshness"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-08-05",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:unlisted_files",
+    "drift:payment_type"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-08-06",
+   "type": "volume_spike",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:missing_after_2_days",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-08-07",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-08-08",
+   "type": "clean",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "drift:payment_type"
+   ]
+  },
+  {
+   "date": "2018-08-09",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:price",
+    "freshness",
+    "known_defect:carrier_before_approval"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-08-10",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-08-11",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:new_optional_field",
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-08-12",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-08-13",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-08-14",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files",
+    "drift:payment_type"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-08-15",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:unlisted_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-08-16",
+   "type": "volume_spike",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_after_2_days",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-08-17",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-08-18",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:price"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-08-19",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  },
+  {
+   "date": "2018-08-20",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:new_optional_field",
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-08-21",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:quarantine_share"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-08-22",
+   "type": "missing_files",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "completeness:missing_files",
+    "drift:payment_type",
+    "freshness"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-08-23",
+   "type": "duplicate_file",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:unlisted_files"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-08-24",
+   "type": "volume_spike",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "completeness:missing_after_2_days",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-08-25",
+   "type": "clean",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "freshness"
+   ]
+  },
+  {
+   "date": "2018-08-26",
+   "type": "clean",
+   "result": "warned",
+   "release": "published",
+   "checks": [
+    "drift:payment_type"
+   ]
+  },
+  {
+   "date": "2018-08-27",
+   "type": "mix_shift",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "drift:payment_type",
+    "drift:price"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-08-28",
+   "type": "schema_break",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "schema_contract:new_optional_field",
+    "schema_contract:quarantine_share",
+    "volume"
+   ],
+   "detected_after_runs": 0
+  },
+  {
+   "date": "2018-08-29",
+   "type": "clean",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "known_defect:no_items"
+   ]
+  },
+  {
+   "date": "2018-08-30",
+   "type": "null_burst",
+   "result": "blocked",
+   "release": "blocked",
+   "checks": [
+    "known_defect:no_items"
+   ],
+   "detected_after_runs": null
+  },
+  {
+   "date": "2018-08-31",
+   "type": "clean",
+   "result": "passed",
+   "release": "published",
+   "checks": []
+  }
+ ]
+}
