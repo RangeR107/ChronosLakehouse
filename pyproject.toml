@@ -13,6 +13,10 @@ requires-python = ">=3.11,<3.12"
 dependencies = [
     "pyspark==3.5.6",
     "psycopg[binary]==3.3.6",
+    # DataSentinel's rule checks (spec: DataSentinel, "Tooling"). 1.24.1 rather than 1.25.0,
+    # which was 11 days old. It brings pandas with it; ruff below keeps pipeline code from
+    # importing pandas directly.
+    "great-expectations==1.24.1",
 ]
 
 [project.optional-dependencies]
@@ -54,3 +58,16 @@ target-version = "py311"
 # tools/ holds the reference scripts whose output the spec quotes. They are kept exactly as they
 # were measured with, so lint changes can't alter a reference number.
 extend-exclude = ["tools"]
+
+[tool.ruff.lint]
+extend-select = ["TID251"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# pandas arrives with Great Expectations, but the pipeline runs on Spark: a pandas DataFrame
+# would pull a whole table onto one machine. The dashboard, which reads small aggregates, may.
+"pandas".msg = "Pipeline code uses Spark, not pandas (pyproject.toml)."
+
+[tool.ruff.lint.per-file-ignores]
+"dashboard/*" = ["TID251"]
+# The DataSentinel console is a Streamlit page like the dashboard, not pipeline code.
+"sentinel/console/*" = ["TID251"]
