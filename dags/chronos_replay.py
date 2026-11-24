@@ -22,12 +22,13 @@ from airflow.providers.standard.operators.trigger_dagrun import TriggerDagRunOpe
 from airflow.sdk import dag, task
 
 PURCHASED_FROM = "2017-01-01"  # the Phase 1 slice starts at the reliable window
+FIRST_DATE, LAST_DATE = datetime(2016, 9, 4), datetime(2018, 9, 30)  # Olist's dates
 
 
 # A daily schedule bounded to Olist's dates, so backfill can create runs, but the scheduler never
 # makes a run for today's wall-clock date (an unbounded @daily did exactly that).
-@dag(dag_id="chronos_replay", schedule="@daily", start_date=datetime(2016, 9, 4),
-     end_date=datetime(2018, 9, 30), catchup=False,
+@dag(dag_id="chronos_replay", schedule="@daily", start_date=FIRST_DATE,
+     end_date=LAST_DATE, catchup=False,
      max_active_runs=1, default_args={"depends_on_past": True, "wait_for_downstream": True},
      tags=["chronos", "simulation"])
 def chronos_replay():
@@ -39,6 +40,11 @@ def chronos_replay():
         from generator.replay import replay
         from generator.source_db import apply_schema, conninfo
         day = logical_date.date()
+        # A run for any other date, such as a manual trigger for today, would load the masters
+        # at that replay time, and the first load wins (ON CONFLICT DO NOTHING). That happened
+        # once: products stamped 2026 were invisible to every 2017 extract (docs/decisions.md).
+        if not FIRST_DATE.date() <= day <= LAST_DATE.date():
+            raise ValueError(f"{day} is outside Olist's dates; refusing to write the feed")
         with psycopg.connect(conninfo()) as conn:
             apply_schema(conn)
             replay(Path(os.environ["CHRONOS_OLIST"]), Path(os.environ["CHRONOS_LANDING"]),
@@ -48,9 +54,21 @@ def chronos_replay():
     run_pipeline = TriggerDagRunOperator(
         task_id="run_chronos_daily", trigger_dag_id="chronos_daily",
         logical_date="{{ logical_date }}", wait_for_completion=True, poke_interval=15,
+        reset_dag_run=True,
+        # The producer keeps producing when a pipeline date fails or is blocked: the next date's
+        # run picks the data up, as a real source would never wait for its consumer.
+        allowed_states=["success", "failed"], failed_states=[])
+
+    @task.short_circuit
+    def is_sunday(logical_date=None) -> bool:
+        return logical_date.weekday() == 6
+
+    maintain = TriggerDagRunOperator(
+        task_id="run_maintenance_weekly", trigger_dag_id="maintenance_weekly",
+        logical_date="{{ logical_date }}", wait_for_completion=True, poke_interval=15,
         reset_dag_run=True)
 
-    write_feed() >> run_pipeline
+    write_feed() >> run_pipeline >> is_sunday() >> maintain
 
 
 chronos_replay()

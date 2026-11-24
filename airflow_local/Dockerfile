@@ -26,6 +26,7 @@ USER airflow
 # Installed against Airflow's constraints file, so nothing Airflow depends on moves. psycopg is
 # already in the image at 3.3.6, the version pyproject.toml pins.
 RUN pip install --no-cache-dir "apache-airflow==3.4.0" "pyspark==3.5.6" \
+      "great-expectations==1.24.1" \
       --constraint https://raw.githubusercontent.com/apache/airflow/constraints-3.4.0/constraints-3.11.txt
 
 # The project code is mounted here by docker-compose.yml, read-only.

@@ -2,11 +2,23 @@
 
 A thin wrapper: every task calls the step function of the same name in jobs/ with the run's
 logical date, and nothing else (docs/decisions.md, Phase 1 runner). The only value passed between
-tasks is register_files' list of new files. Steps 4 and 10 to 13 (open_run, sentinel_audit,
-publish_release, notify) arrive with releases in Phase 3; load_serving runs last until then.
+tasks is register_files' list of new files.
+
+Alerts (sentinel/alerts.py): every task's last failed try calls task_failed, which names the
+run, the task and the error (a blocked audit's error lists the blocking checks); notify, the last
+task, sends the success summary. Both are recorded in metrics.notifications and posted to Slack
+when CHRONOS_SLACK_WEBHOOK is set.
 
 Settings from the spec: max_active_runs = 1, because each date builds on the previous one
-(scenario 9); infrastructure tasks retry twice with backoff (scenario 7 makes that safe).
+(scenario 9); infrastructure tasks retry twice with backoff (scenario 7 makes that safe). A
+backfill applies its own limit, so it must be run with --max-active-runs 1 (docs/runbook.md).
+
+Why there is no depends_on_past: a date that fails or is blocked must not stop the next one. The
+next date's run starts from the last published release and picks the failed date's data up
+(spec: Publishing). The one failure that must stop later dates, a publish that died between
+fast-forwards, is guarded by open_run itself: it refuses to start while any release is still
+'publishing' (docs/decisions.md).
+
 The schedule is None: business dates are replayed history, run by backfill or by chronos_replay,
 never by the wall clock.
 """
@@ -14,11 +26,15 @@ from datetime import date, datetime, timedelta
 
 from airflow.sdk import dag, task
 
-# depends_on_past + wait_for_downstream: a date's tasks wait until the previous date's run has
-# finished, however runs are created. max_active_runs alone isn't enough: an Airflow 3 backfill
-# applies its own limit (--max-active-runs), not the DAG's.
+
+def on_failure(context):
+    # Imported inside the callback, so parsing the DAG file stays light.
+    from sentinel.alerts import task_failed
+    task_failed(context)
+
+
 DEFAULTS = {"retries": 2, "retry_delay": timedelta(seconds=30), "retry_exponential_backoff": True,
-            "depends_on_past": True, "wait_for_downstream": True}
+            "on_failure_callback": on_failure}
 
 
 def business_date(logical_date: datetime) -> date:
@@ -56,23 +72,37 @@ def chronos_daily():
         from jobs.land_to_bronze import land_to_bronze as step
         return step(context(), business_date(logical_date), registered["new"])
 
-    def step_task(module: str, name: str):
-        @task(task_id=name)
+    # Shares the one-slot chronos_lake pool with maintenance_weekly (see maintenance_weekly.py).
+    @task.short_circuit(pool="chronos_lake")
+    def open_run(logical_date=None) -> bool:
+        # False skips the rest: a date already published republishes nothing, and the run ends
+        # successfully (docs/runbook.md).
+        from sentinel.release import open_run as step
+        return not step(context(), business_date(logical_date))["already_published"]
+
+    def step_task(module: str, name: str, **options):
+        @task(task_id=name, **options)
         def run(logical_date=None):
             import importlib
-            step = getattr(importlib.import_module(f"jobs.{module}"), name)
+            step = getattr(importlib.import_module(module), name)
             return step(context(), business_date(logical_date))
         return run
 
     registered = register_files()
     landed = land_to_bronze(registered)
-    wait_for_landing() >> registered >> extract_dimensions() >> landed
+    wait_for_landing() >> registered >> extract_dimensions() >> open_run() >> landed
     (landed
-     >> step_task("bronze_to_silver", "bronze_to_silver")()
-     >> step_task("build_dimensions", "build_dimensions")()
-     >> step_task("build_facts", "build_facts")()
-     >> step_task("recompute_aggregates", "recompute_aggregates")()
-     >> step_task("load_serving", "load_serving")())
+     >> step_task("jobs.bronze_to_silver", "bronze_to_silver")()
+     >> step_task("jobs.build_dimensions", "build_dimensions")()
+     >> step_task("jobs.build_facts", "build_facts")()
+     >> step_task("jobs.recompute_aggregates", "recompute_aggregates")()
+     # A failed audit needs a person to look at it: never retried automatically.
+     >> step_task("sentinel.gate", "sentinel_audit", retries=0)()
+     # Can retry: it skips tables already advanced.
+     >> step_task("sentinel.release", "publish_release")()
+     >> step_task("jobs.load_serving", "load_serving")()
+     >> step_task("sentinel.release", "clean_up")()
+     >> step_task("sentinel.alerts", "notify")())
 
 
 chronos_daily()

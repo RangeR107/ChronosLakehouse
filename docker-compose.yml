@@ -43,6 +43,10 @@ x-airflow-common:
     CHRONOS_LANDING: /opt/chronos/lake/airflow/landing
     CHRONOS_WAREHOUSE: /opt/chronos/lake/airflow/warehouse
     CHRONOS_OLIST: /opt/chronos/data/raw/olist
+    # Alerts (sentinel/alerts.py). Set CHRONOS_SLACK_WEBHOOK in .env (never committed) to post
+    # to Slack; without it, notices are only recorded for the console.
+    CHRONOS_SLACK_WEBHOOK: ${CHRONOS_SLACK_WEBHOOK:-}
+    CHRONOS_CONSOLE_URL: ${CHRONOS_CONSOLE_URL:-http://localhost:8502}
   volumes:
     - ./dags:/opt/airflow/dags
     - ./logs:/opt/airflow/logs
@@ -50,6 +54,7 @@ x-airflow-common:
     - ./airflow_local/plugins:/opt/airflow/plugins
     # The pipeline's code, read-only, and the local lake (landing files and the warehouse).
     - ./jobs:/opt/chronos/jobs:ro
+    - ./sentinel:/opt/chronos/sentinel:ro
     - ./generator:/opt/chronos/generator:ro
     - ./contracts:/opt/chronos/contracts:ro
     - ./sql:/opt/chronos/sql:ro
@@ -170,6 +175,9 @@ services:
         mkdir -v -p /opt/airflow/{logs,dags,plugins,config}
         /entrypoint airflow version
         /entrypoint airflow config list >/dev/null
+        # One slot shared by chronos_daily's open_run and maintenance_weekly: no run can open its
+        # branches while maintenance commits to main (docs/decisions.md).
+        /entrypoint airflow pools set chronos_lake 1 "open_run and lake maintenance, one at a time"
         chown -R "${AIRFLOW_UID:-50000}:0" /opt/airflow/
         chown -v -R "${AIRFLOW_UID:-50000}:0" /opt/airflow/{logs,dags,plugins,config}
     environment:
