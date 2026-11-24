@@ -208,7 +208,9 @@ kills `build_facts` midway and checks both.
 
 **Why does Airflow need `depends_on_past` if `max_active_runs` is 1?** Because an Airflow 3
 backfill applies its own concurrency limit; in testing, three dates ran at once until
-`depends_on_past` enforced the order (`docs/decisions.md`).
+`depends_on_past` enforced the order (`docs/decisions.md`). *Update, Phase 3:* `depends_on_past` was
+removed. With releases, a blocked date must not stop later dates, and the backfill's
+`--max-active-runs 1` keeps dates serial (`docs/decisions.md`, 23 Nov 2026).
 
 ## What isn't done yet
 

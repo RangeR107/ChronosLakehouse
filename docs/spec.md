@@ -260,6 +260,13 @@ The generator turns Olist's final records back into the stream of events that wo
 
 **Event envelope.** event\_id, event\_type, logical key, version, supersedes\_event\_id, schema\_version, event\_time, emitted\_at and payload. Bronze adds source\_file, line number and ingested\_at. So every event has up to three clocks: when it happened, when the source sent it, and when you received it.
 
+**Schema versions.** Each line carries its own schema\_version, and silver checks it against that version's contract (`contracts/events_v<N>.json`). After a change, late and resent events still arrive in the old version. A contract field can say `renamed_from`; silver copies it back to the earlier name, so tables downstream never change. The announced change, built as the spec's once-each defect (Decision log, 2026-11-24):
+
+- **From 1 Feb 2017:** order items carry Olist's `product_category_name`, a new optional field. Version 1's contract lists it, and `silver.order_items` stores it. Older tables get the column by `ALTER TABLE ADD COLUMN`, a metadata-only change in Iceberg, so older rows read null.
+- **From 15 Feb 2017:** events are sent as schema\_version 2, in which `order_placed.customer_zip_code_prefix` is renamed `customer_zip_code`.
+- **Which version an event uses** is decided by its first send, so every copy of an event stays byte-identical. Each day's marker names the newest version its lines use.
+- **A field no contract lists** raises the schema contract's "new optional field" warning.
+
 **Source database (PostgreSQL)**
 
 | Table | One row per | Columns | Written when |
@@ -297,7 +304,7 @@ The master holds only the current address. Each order's own address travels in i
 | Early-arriving facts: a customer or seller row reaches PostgreSQL 1 to 3 days after the first order that references it | 0.2% of orders | The row arrives | Inferred members |
 | Late dimension change: a customer's address update reaches PostgreSQL 1 to 3 days after the order that carries it; updated\_at is the arrival time, address\_effective\_from stays the order's purchase time | 10% of address changes (about 25 people) | The update arrives | Re-keying facts to the right SCD Type 2 version |
 | Late file: an hourly file delivered a day late | About 10 files | The file arrives | Completeness and freshness checks; dirty periods |
-| Announced schema change: a new optional field on a fixed date, then a renamed field under a new schema\_version | Once each | The contract knows the new version | Schema contract handling |
+| Announced schema change: a new optional field on a fixed date, then a renamed field under a new schema\_version (built: order items gain Olist's product\_category\_name from 1 Feb 2017; version 2 renames customer\_zip\_code\_prefix to customer\_zip\_code from 15 Feb 2017; Decision log, 2026-11-24) | Once each | The contract knows the new version | Schema contract handling |
 
 **Irreversible anomalies (evaluation replay only)**, about 30 of each, placed on held-out days: hours or half-days of files never delivered; a whole file delivered twice under a new name; volume spikes; payment-type mix or price levels pushed off baseline; an unannounced schema break; bursts of nulls.
 
@@ -332,7 +339,7 @@ Dashboard aggregates (late deliveries by day and region, seller handover by mont
 - Surrogate keys are deterministic: the first 8 bytes of SHA-256 over customer\_unique\_id and effective\_from, read as a BIGINT, so reruns produce identical keys. A uniqueness check catches the negligible chance of a collision.
 - **Late dimension change.** When a version arrives whose effective\_from is earlier than facts already loaded for that person, re-key that person's facts with purchase time on or after the new effective\_from, in the same run. This is the late-arriving dimension case Kimball's Design Tip #78 discusses ([DecisionWorks](https://decisionworks.com/2006/04/design-tip-78-late-arriving-dimension-rows/)).
 
-**Inferred members (early-arriving facts).** When a fact arrives with a customer or seller the dimension hasn't seen, insert a placeholder row from its natural key with is\_inferred = true, and point the fact at it. When the real row arrives, overwrite the placeholder in place, so existing facts stay attached and pick up the real attributes ([LeapFrogBI](https://www.leapfrogbi.com/?p=13291)). Kimball notes that Type 2 changes to a placeholder row can force changes to fact keys ([Design Tip #78](https://decisionworks.com/2006/04/design-tip-78-late-arriving-dimension-rows/)), so write down the rule you choose and test it.
+**Inferred members (early-arriving facts).** When a fact arrives with a customer or seller the dimension hasn't seen, insert a placeholder row from its natural key with is\_inferred = true, and point the fact at it. When the real row arrives, overwrite the placeholder in place, so existing facts stay attached and pick up the real attributes ([LeapFrogBI](https://www.leapfrogbi.com/?p=13291)). Kimball notes that Type 2 changes to a placeholder row can force changes to fact keys ([Design Tip #78](https://decisionworks.com/2006/04/design-tip-78-late-arriving-dimension-rows/)), so write down the rule you choose and test it. The rule here: a placeholder customer has the key the real row will have, so the real row overwrites it in place. If a person's first order is earlier than their first known address (their row arrived late and had already changed again), the placeholder stays for that gap, and the Type 2 chain closes it where the real row starts (Decision log, 2026-11-24).
 
 **Why sellers and products are Type 1.** Olist has one snapshot of each, with no history. Inventing seller moves to demonstrate SCD Type 2 would put fake facts in the warehouse; dim\_customer already demonstrates the pattern on real changes. If a source ever supplies seller history, dim\_seller follows the same rules.
 
@@ -383,7 +390,7 @@ A day's data is visible only as a release: a set of table snapshots that were au
 5. **Serve.** load\_serving reads each gold table at the manifest's snapshot ids, writes the rows into staging tables in PostgreSQL, then runs every MERGE plus the update of the active release id inside one PostgreSQL transaction (BEGIN ... COMMIT), so the dashboards switch releases all at once.
 6. **Clean up.** Drop the run's branches once the release is served; the tags keep the published snapshots.
 
-**What a run processes.** Bronze is append-only and written outside the run's branches, so each run needs a rule for what to pick up: every bronze event ingested after the watermark stored in the last published release, up to the run's start. A blocked run publishes nothing and doesn't move the watermark, so its events are picked up again by the next run, together with new ones. Nothing is lost, and nothing is counted twice in published data.
+**What a run processes.** Bronze is append-only and written outside the run's branches, so each run needs a rule for what to pick up: every bronze event ingested after the watermark stored in the last published release, up to the run's start. A batch is what one run landed (one ingested\_at). A blocked run publishes nothing and *holds* the batches it processed: later runs leave them out until someone releases them (a false alarm, or the cause is fixed; the next run takes them in) or rejects them (never processed). Taking a blocked batch in again automatically would either block every later run, since the bad data is still there, or publish it a day late without judging it (Decision log, 2026-11-24). Nothing is lost silently, and nothing is counted twice in published data.
 
 **Who sees what**
 
@@ -403,6 +410,7 @@ A day's data is visible only as a release: a set of table snapshots that were au
 
 - **Crash between fast-forwards.** Some tables have moved and the release is not marked published. Rerunning publish is safe: it skips tables whose main already points at the branch head, then finishes. Dashboards stay on the previous release throughout.
 - **Main moved after the branch was created.** fast\_forward can only move main along the branch's own history, so a commit to main from anywhere else (compaction, say) makes publish fail rather than silently overwrite. That is why runs are serial and maintenance shares a lock with the daily DAG (see Orchestration).
+- **A stale cached table.** Iceberg's Spark catalog caches loaded tables by default, and a cached table doesn't see commits made by another session or process until the entry expires. A publish once read a table's refs without its run branch (Decision log, 2026-11-24). The jobs set `cache-enabled=false` on their catalog, so every read loads the current metadata. If a branch is still missing, publish stops with the reason, and the release stays `publishing` until it is rerun.
 
 ## DataSentinel: the quality gate
 
@@ -427,32 +435,32 @@ DataSentinel decides whether a run becomes a release. It is the audit step of th
 | Completeness and keys | Silver and gold | GX not-null and uniqueness expectations on each table's grain | Block |
 | Referential integrity | Gold facts | Every dimension key exists; inferred members count as present | Block |
 | Valid values | Silver | Price above 0, review score 1 to 5, installments at least 1, known payment types. The real Olist rows with 0 installments or type not\_defined are flagged as known source defects instead (see Data sources) | Quarantine rows; Block above 0.5% of the day's rows |
-| Known source defects | Silver | The defect rules in Data sources | Flag rows; Block when a day's rate scores above 3.5 against its baseline |
+| Known source defects | Silver | The defect rules in Data sources | Flag rows; Block when a day's defect count has a binomial tail probability below 0.001 at the baseline rate (details below) |
 | Reconciliation | Silver to gold | Order counts and revenue per business date match exactly, once flagged and quarantined rows are accounted for | Block |
-| Volume | Each ingest day | Modified z-score against the same weekday over the previous 8 weeks (details below) | Block; Warn on known sale days |
+| Volume | Each ingest day: the new orders the run itself landed, not batches it took in after a release | Modified z-score against the latest 8 published same weekdays within 12 weeks, with the MAD at least 10% of the median; flag above 5 (details below) | Block; Warn on known sale days |
 | Freshness | Landing zone | Latest file arrival and latest event time against an agreed delay | Block publishing the day as complete; dashboards show staleness |
-| Distribution drift | Payment-type mix, price buckets, category mix, review scores | Population Stability Index against a trailing baseline | Warn from 0.1; Block from 0.25 once tuned |
+| Distribution drift | Payment-type mix, price buckets, category mix, review scores | Population Stability Index on smoothed counts against a trailing baseline | Tuned: payment type, price and review score warn from 0.25 and block from 0.5; category warns from 1.25 and never blocks (Decision log, 2026-11-24) |
 | Null-rate change | All columns | Share of nulls compared with baseline | Warn |
 | Job health | Airflow tasks | Failures, retries, duration compared with baseline | Alert |
 | Completeness | Landing zone | Compare the completion marker's file list, row counts and checksums with the file manifest | Listed file missing: Warn and publish with the date marked incomplete, and alert if it is still missing after 2 days. File not listed, or a row count or checksum that differs from the marker: Block |
 
-The 0.5% and 3.5 thresholds are starting values. Like every threshold here, tune them on the tuning period only (see Testing and evaluation).
+The 0.5%, 3.5 and 0.001 thresholds are starting values. Like every threshold here, tune them on the tuning period only (see Testing and evaluation).
 
 **Anomaly detection: methods and why**
 
-- **Robust volume scores.** Use the modified z-score: 0.6745 times the distance from the median, divided by the median absolute deviation. Iglewicz and Hoaglin recommend flagging absolute values above 3.5 ([NIST handbook](https://itl.nist.gov/div898/handbook/eda/section3/eda35h.htm)). Medians resist being pulled by the very outliers you are looking for.
+- **Robust volume scores.** Use the modified z-score: 0.6745 times the distance from the median, divided by the median absolute deviation. Iglewicz and Hoaglin recommend flagging absolute values above 3.5 ([NIST handbook](https://itl.nist.gov/div898/handbook/eda/section3/eda35h.htm)). Medians resist being pulled by the very outliers you are looking for. Tuning changed two things (Decision log, 2026-11-24). The count is new orders, not lines: lines are mostly follow-up events for earlier days' orders and swung from 0.49x to 2.24x on clean days. The MAD is at least 10% of the median, and the limit is 5: eight quiet weeks can have a MAD of 1% of the median, and then an ordinary dip scores past 6.
 - **Compare like with like.** Saturday volume in Olist is about 33% below Monday's, so compare each day with the same weekday, not with yesterday.
 - **Known sale days.** On 24 Nov 2017 orders were about 6.9 times the typical day. Keep a calendar of known events in dim\_date; on those days, widen the bands and downgrade volume alerts to warnings, rather than turning checks off.
-- **Drift thresholds.** A common reading of PSI is below 0.1 no substantial change, 0.1 to 0.25 a small change, and 0.25 or more a substantial change. The same review notes PSI has known weaknesses and should be used with care ([arXiv review](https://arxiv.org/pdf/2303.01227)). Treat these as starting points and tune them on clean history.
-- **When the baseline has no spread.** For rare defects, most days have zero, so the median absolute deviation is zero and the modified z-score is undefined. Then switch to a rate-based limit: take the pooled baseline rate p over the trailing window, with a floor of 3 divided by the baseline's total rows (the rule of three, a 95% upper bound when zero defects were seen), and flag a day whose defect count has a binomial tail probability below 0.001 at that rate.
-- **Warm-up, and recording the method.** Until a check has 4 weeks of history it only warns, never blocks; from 4 to 8 weeks it uses the history it has. Every decision stores the method used (modified z-score, rate limit or warm-up) and the baseline it was compared with, so any alert can be explained afterwards.
+- **Drift thresholds.** A common reading of PSI is below 0.1 no substantial change, 0.1 to 0.25 a small change, and 0.25 or more a substantial change. The same review notes PSI has known weaknesses and should be used with care ([arXiv review](https://arxiv.org/pdf/2303.01227)). Treat these as starting points and tune them on clean history. Tuning found that with 71 categories, the bins empty on a given day dominate the score, so PSI adds 0.5 to every bin's count first, and each feature has its own thresholds taken from the clean tuning period (Decision log, 2026-11-24).
+- **Defect rates are counts: use a binomial test.** A day's defects are a few out of tens or hundreds of orders. A modified z-score on daily rates ignores how many orders each rate rests on, so it swings with single orders: on the real slice, 5 unavailable orders out of 95 scored 7.3. So every known-defect check takes the pooled baseline rate p over the trailing window, with a floor of 3 divided by the baseline's total rows (the rule of three, a 95% upper bound when zero defects were seen), and flags a day whose defect count has a binomial tail probability below 0.001 at that rate (Decision log, 2026-11-23).
+- **Warm-up, and recording the method.** Until a check has 4 weeks of history it only warns, never blocks. The same-weekday checks (volume and freshness) get one point a week, so they warn until 8 published points are there, looking back up to 12 weeks: with 4 to 7 points taken during Olist's early-2017 growth, normal days scored far past the limit (Decision log, 2026-11-23). Every decision stores the method used (modified z-score, rate limit or warm-up) and the baseline it was compared with, so any alert can be explained afterwards.
 
 **Tooling**
 
 - **GX Core for rule checks.** It is open source, its stewardship is moving to Fivetran ([GX announcement](https://www.greatexpectations.io/blog/an-update-from-great-expectations)), and recent releases are in the 1.24 line ([release tracker](https://newreleases.io/project/pypi/great-expectations/release/1.23.2)). Pin the version you test with. Glue 5.0 and later can install extra Python libraries from a requirements.txt ([AWS docs](https://docs.aws.amazon.com/ja_jp/glue/latest/dg/migrating-version-50.html)).
 - **Metrics store in PostgreSQL:** check\_results (run, table, partition, check, method, severity, observed, expected, status), profiles (table, partition, column, metric, value) and releases (release\_id, business\_date, run\_id, status, warnings, published\_at, and one snapshot id per table).
 - **Console in Streamlit:** check history per table, open failures, the quarantine browser, the release history, the restatement report and alert history.
-- **Alerts** from Airflow failure callbacks to email or a Slack webhook, naming the run, the failed checks and the console link.
+- **Alerts** from Airflow failure callbacks to email or a Slack webhook, naming the run, the failed checks and the console link. Every notice is also recorded in metrics.notifications for the console; Slack is used when a webhook is configured, and email is not built (Decision log, 2026-11-24).
 
 ## Orchestration: the Airflow DAGs
 
@@ -476,7 +484,12 @@ One daily DAG processes one business date end to end, and every task in it is sa
 
 **DAG settings.** max\_active\_runs = 1, so dates run serially (scenario 9). Infrastructure tasks (2 to 9, and 12) retry twice with backoff. sentinel\_audit never retries automatically, because a failed audit needs a person to look at it. publish\_release can retry, because it skips tables already advanced. Backfilling a date range is safe because every task is idempotent. Pass --max-active-runs 1 to an Airflow 3 backfill (it applies its own limit, not the DAG's), and give every task depends\_on\_past and wait\_for\_downstream so dates can't overlap however runs are created. Rerunning a date that is already published republishes nothing: it logs "already published in release X" and exits successfully. Logic bugs are fixed by a full rebuild instead: keep bronze, reset silver and gold, and run every date again in order (docs/runbook.md).
 
-**maintenance\_weekly:** compact small files, expire snapshots older than the restatement window (tagged release snapshots are kept), and remove orphan files, reporting what each job changed. It shares a one-slot Airflow pool with the daily DAG, so it never commits to main while a run's branches are open; a commit there would make that run's publish fail.
+**maintenance\_weekly:** compact small files, expire snapshots, and remove orphan files, reporting what each job changed per table.
+
+- **Expiry:** it removes every snapshot that no tag or branch needs, keeping main's latest. Every release is a tag kept for 10 years, so every published release stays readable. Iceberg stamps snapshots with wall-clock time, and a replay runs months of business dates in an hour, so an age cut-off would expire nothing.
+- **It never commits to main while a run is in progress.** It refuses while any table has an open run branch or a release is still `publishing`. In Airflow it shares a one-slot pool with `open_run`, so no run can open while it works. A commit there would make that run's publish fail.
+- **A blocked run's branches** don't count as open: they are kept for inspection and never fast-forwarded. Once every batch the run held is released or rejected, maintenance drops them.
+- **When:** chronos\_replay triggers it after each replayed Sunday; its schedule is None, never the wall clock (Decision log, 2026-11-24).
 
 **Cost note.** Run Airflow locally rather than on a managed service; it only sends commands to AWS, so it doesn't need to live there.
 
@@ -502,6 +515,7 @@ The project's credibility rests on two pieces of evidence: tests proving the pip
 - On the test period, inject about 30 anomalies of each type from the manifest, and leave other days clean.
 - Report, per check and anomaly type: detection rate, false-alarm rate on clean days, time to detection in runs, and whether any bad data reached a published release (target: none).
 - Publish a confusion matrix and a short write-up of misses and false alarms, with what you changed and why.
+- Results: `docs/evaluation/report.md`. As measured on the held-out test period: 175 of 180 anomalies detected, 109 of the 150 meant to block were blocked, and 3 of 155 clean days were falsely blocked. A warm-up bug the test period exposed has since been fixed. The current code, re-scored post-hoc and so not held out: 139 of 150 blocked, 8 false blocks.
 
 **Performance numbers to record**
 
@@ -596,6 +610,8 @@ spark = (
     .config("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog")
     .config("spark.sql.catalog.local.type", "hadoop")
     .config("spark.sql.catalog.local.warehouse", "warehouse")
+    # No table cache: a cached table misses other sessions' commits (Failure handling).
+    .config("spark.sql.catalog.local.cache-enabled", "false")
     .getOrCreate()
 )
 ```
@@ -708,10 +724,10 @@ Use three bullets, and replace every \[N\] with a number you measured. Don't add
 
 - **Published metrics grain.** A single business date couldn't hold monthly, quarterly and cohort metrics. The grain is now metric, period type, period start, slice and release, with numerator and denominator.
 - **Dirty periods.** Each metric now has a written rule for which periods a changed order dirties, and periods are recomputed whole, because ranks and shares can't be patched row by row.
-- **What a run processes.** Runs read bronze from the last published release's watermark, so a blocked run's events are picked up again, never lost.
+- **What a run processes.** Runs read bronze from the last published release's watermark. A blocked run's batches are held until someone releases or rejects them, so bad data is neither published a day late nor re-judged forever.
 - **PostgreSQL trigger.** updated\_at comes from a BEFORE INSERT OR UPDATE trigger on the replay clock; a column default only fires on INSERT.
 - **Completeness.** The producer's completion marker lists every file it sent, so DataSentinel can notice a missing file, not only a late one.
-- **Zero-spread baselines.** Rare defects fall back to a rate-based limit when the median absolute deviation is zero; checks warn only during warm-up; every decision records its method.
+- **Defect-rate baselines.** Known-defect checks use a binomial tail test at the pooled baseline rate, floored by the rule of three; checks warn only during warm-up; every decision records its method.
 - **Stable hashing.** event\_id and surrogate keys use SHA-256, never Python's hash().
 - **measure\_spec.py** is now a reference implementation that writes every breakdown to CSV. Categories are ranked before review statistics are joined, retention uses an inclusive boundary, and sellers need 6 ranked months before being classified (9 sellers, not 13).
 - **Smoke test** creates its namespace and checks that reads really come from the branch.
