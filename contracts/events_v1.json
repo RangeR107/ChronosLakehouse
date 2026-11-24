@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Order-lifecycle events, schema version 1. Payload values travel as Olist's CSV text (null when the cell is empty); 'type' is what silver casts each field to.",
+  "description": "Order-lifecycle events, schema version 1. product_category_name is an announced optional field: the producer sends it from 2017-02-01, earlier lines don't have it. Payload values travel as Olist's CSV text (null when the cell is empty); 'type' is what silver casts each field to.",
   "envelope": {
     "event_id": "string",
     "event_type": "string",
@@ -34,7 +34,8 @@
             "seller_id": {"type": "string", "required": true},
             "shipping_limit_date": {"type": "timestamp", "required": true},
             "price": {"type": "decimal(12,2)", "required": true},
-            "freight_value": {"type": "decimal(12,2)", "required": true}
+            "freight_value": {"type": "decimal(12,2)", "required": true},
+            "product_category_name": {"type": "string", "required": false, "since": "2017-02-01"}
           }
         },
         "payments": {

@@ -84,7 +84,9 @@ def write_day(events: list[dict], landing_dir: Path, day: str,
                       "sha256": hashlib.sha256(content).hexdigest()})
 
     # Written after every on-time file it lists, so a reader that sees the marker sees them all.
-    marker = {"business_date": day, "schema_version": SCHEMA_VERSION, "files": files}
+    # The newest version the day's lines use: after a change, late lines can still be older.
+    version = max((e["schema_version"] for e in events), default=SCHEMA_VERSION)
+    marker = {"business_date": day, "schema_version": version, "files": files}
     write_once(folder / MARKER, (json.dumps(marker, indent=2) + "\n").encode("utf-8"))
     return marker
 
@@ -99,3 +101,11 @@ def write_late_files(events: list[dict], landing_dir: Path, day: str,
             write_once(folder / name, content)
             written.append(name)
     return written
+
+
+def write_duplicate(events: list[dict], landing_dir: Path, day: str, hour: str) -> str:
+    """Evaluation only: send one of the day's files again under a name the marker doesn't list."""
+    name = f"events_{day}T{hour}.jsonl"
+    copy_name = f"events_{day}T{hour}_resent.jsonl"
+    write_once(Path(landing_dir) / f"date={day}" / copy_name, hour_files(events, day)[name])
+    return copy_name

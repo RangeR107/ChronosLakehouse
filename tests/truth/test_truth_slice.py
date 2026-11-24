@@ -17,6 +17,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
 
+import psycopg
 import pytest
 from conftest import throwaway_database  # tests/ is on sys.path under pytest
 from pyspark.sql import functions as F
@@ -26,8 +27,10 @@ from generator.defects import DRAIN_DAYS, Defects
 from generator.olist import load
 from generator.replay import plan, replay
 from generator.source_db import conninfo
-from jobs.context import Context, run_time
+from jobs.batches import RELEASED, decide
+from jobs.context import Context, release_id, run_time
 from jobs.run_day import run_day
+from sentinel.gate import SentinelBlocked
 
 OLIST = Path(__file__).resolve().parents[2] / "data" / "raw" / "olist"
 MINI = Path(__file__).resolve().parents[1] / "fixtures" / "olist_mini"
@@ -49,8 +52,11 @@ class Slice:
 
 # The fixture has 7 orders, so the spec's rates would inject nothing: it runs with rates high
 # enough that every defect kind lands on it. The real slice runs the spec's suggested rates.
+# The announced schema change lands inside the fixture's 15 days; the real slice uses the
+# default dates (1 and 15 Feb 2017), inside its two months.
 HEAVY = Defects(seed=11, late=0.5, out_of_order=0.5, duplicate=0.5, correction=0.3,
-                early_fact=0.5, held_seller=0.5, late_dim_change=1.0, late_file=0.2)
+                early_fact=0.5, held_seller=0.5, late_dim_change=1.0, late_file=0.2,
+                new_field_from="2017-01-05", schema_v2_from="2017-01-10")
 
 
 # The real slice runs locally (it needs data/raw/olist); the fixture runs the same comparison
@@ -103,10 +109,18 @@ def slice_run(request, spark, tmp_path_factory):
     with throwaway_database() as conn:
         ctx = Context(spark, landing, namespace_prefix=f"{s.name}{uuid.uuid4().hex[:6]}_",
                       source_conninfo=conninfo(conn.info.dbname), reference_dir=s.data)
-        retries = {}
+        retries, released = {}, []
 
         def run(d):
-            run_day(ctx, d)
+            try:
+                run_day(ctx, d)
+            except SentinelBlocked:
+                # A false alarm on real data (1 Feb 2017: an unusual count of unavailable
+                # orders). Do what the runbook says a person does: release the day's batches,
+                # so the next run takes them in. The tables must still converge exactly.
+                decide(ctx, d, RELEASED)
+                released.append(d)
+                return
             if d in s.retried:
                 before = checksums(ctx)
                 again = run_day(ctx, d)
@@ -178,9 +192,8 @@ def test_rerunning_a_day_changes_nothing(slice_run):
     assert set(retries) == set(s.retried)
     for day, (before, after, again) in retries.items():
         assert after == before, day
-        assert again["files"] == 0 and again["events"] == 0, day
-        assert all(v == 0 for v in again["dimensions"].values()), day
-        assert all(v == 0 for v in again["facts"].values()), day
+        # Rerunning a published date republishes nothing (docs/runbook.md).
+        assert again["already_published"] == release_id(day), day
 
 
 def test_serving_holds_the_gold_aggregate(slice_run):
@@ -209,4 +222,16 @@ def test_event_ledger_matches_the_ground_truth(slice_run):
         ctx.table("gold", "fact_order_events")).collect()}
     assert got == expected
     kinds = {n["defect"] for n in feed.notes}
-    assert {"late_event", "duplicate", "correction", "out_of_order"} <= kinds, kinds
+    assert {"late_event", "duplicate", "correction", "out_of_order", "new_optional_field",
+            "schema_version_2"} <= kinds, kinds
+
+
+def test_every_held_batch_was_released_and_published(slice_run):
+    """A day the audit blocked (a false alarm here) was released, and the next run published
+    it: nothing is left held, and the business tables above still equal the reference."""
+    _, ctx, _, _ = slice_run
+    with psycopg.connect(ctx.source_conninfo) as conn:
+        states = conn.execute("SELECT state, count(*) FROM metrics.batch_holds "
+                              "WHERE namespace = %s GROUP BY 1",
+                              (ctx.namespace_prefix,)).fetchall()
+    assert all(state == "published" for state, _ in states), states

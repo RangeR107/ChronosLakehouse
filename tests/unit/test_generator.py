@@ -170,3 +170,23 @@ def test_a_held_back_seller_no_order_names_is_loaded_at_the_start():
     scripted = Defects.only({(HELD_SELLER, "s_1"): 2})
     assert plan(load(MINI), date(2017, 1, 8), date(2017, 1, 15), scripted).held == set()
     assert plan(load(MINI), date(2017, 1, 1), date(2017, 1, 15), scripted).held == {"s_1"}
+
+
+def test_the_schema_change_keeps_every_copy_of_an_event_identical():
+    from generator.defects import Defects, schema_changes
+    from generator.events import make_event
+    payload = {"order_id": "o", "customer_zip_code_prefix": "01310",
+               "items": [{"order_item_id": "1", "product_id": "p"}], "payments": []}
+    before = make_event("order_placed", ["o"], "2017-01-07 10:00:00", "2017-01-07 10:00:00",
+                        payload)
+    resent = {**before, "emitted_at": "2017-01-09 10:00:00"}   # a duplicate, after the change
+    after = make_event("order_placed", ["o2"], "2017-01-09 10:00:00", "2017-01-09 10:00:00",
+                       {**payload, "order_id": "o2"})
+    d = Defects(new_field_from="2017-01-08", schema_v2_from="2017-01-08")
+    out, notes = schema_changes([before, resent, after], d, {"p": "pet_shop"})
+    assert out[0] == before and out[1]["payload"] == before["payload"]   # first sent before
+    assert out[2]["schema_version"] == 2
+    assert "customer_zip_code" in out[2]["payload"]
+    assert "customer_zip_code_prefix" not in out[2]["payload"]
+    assert out[2]["payload"]["items"][0]["product_category_name"] == "pet_shop"
+    assert {n["defect"] for n in notes} == {"new_optional_field", "schema_version_2"}

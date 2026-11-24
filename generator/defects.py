@@ -28,6 +28,9 @@ CORRECTION, LATE, OUT_OF_ORDER, DUPLICATE = ("correction", "late_event", "out_of
                                              "duplicate")
 LATE_FILE, EARLY_FACT, HELD_SELLER, LATE_DIM_CHANGE = ("late_file", "early_arriving_customer",
                                                        "held_back_seller", "late_dimension_change")
+NEW_FIELD, SCHEMA_V2 = "new_optional_field", "schema_version_2"
+# The announced schema change (spec: reversible defects, "Once each"); contracts/events_v2.json.
+RENAMED = ("order_placed", "customer_zip_code_prefix", "customer_zip_code")
 
 # The longest delay any single defect adds (late events: 10 days), plus a late file's day.
 DRAIN_DAYS = 11
@@ -50,12 +53,18 @@ class Defects:
     held_seller: float = 0.002
     late_dim_change: float = 0.10
     late_file: float = 0.001
+    # The announced schema change, by the date an event is first sent (the contracts give the
+    # same dates). From new_field_from, order items carry Olist's product_category_name; from
+    # schema_v2_from, events are sent as schema_version 2, with one field renamed. None: never.
+    new_field_from: str | None = "2017-02-01"
+    schema_v2_from: str | None = "2017-02-15"
     scripted: dict = field(default_factory=dict)
 
     @classmethod
     def only(cls, scripted: dict) -> "Defects":
         return cls(late=0, out_of_order=0, duplicate=0, correction=0, early_fact=0,
-                   held_seller=0, late_dim_change=0, late_file=0, scripted=scripted)
+                   held_seller=0, late_dim_change=0, late_file=0, new_field_from=None,
+                   schema_v2_from=None, scripted=scripted)
 
     def draw(self, kind: str, identity) -> float:
         text = f"{self.seed}\x1f{kind}\x1f{identity}"
@@ -160,6 +169,44 @@ def inject_events(events: list[dict], d: Defects) -> tuple[list[dict], list[dict
                           "logical_key": e["logical_key"], "event_id": e["event_id"],
                           "resent_at": dupes[-1]["emitted_at"]})
     return out + dupes, notes
+
+
+def schema_changes(events: list[dict], d: Defects,
+                   categories: dict[str, str | None]) -> tuple[list[dict], list[dict]]:
+    """Send events in the new formats from the announced dates; content is unchanged.
+
+    Decided per event_id by its first send, so every copy of an event (a duplicate, a late
+    resend) is byte-identical, and a late event keeps the version it was first sent in.
+    The optional field is a real Olist value (the product's category); the rename keeps the
+    value. Applied last, after the defects that read payload fields by their old names.
+    """
+    first = {}
+    for e in events:
+        first[e["event_id"]] = min(first.get(e["event_id"], e["emitted_at"]), e["emitted_at"])
+    out, changed = [], {NEW_FIELD: 0, SCHEMA_V2: 0}
+    for e in events:
+        sent = first[e["event_id"]][:10]
+        if d.new_field_from and sent >= d.new_field_from and e["event_type"] == "order_placed":
+            p = {**e["payload"], "items": [{**i, "product_category_name":
+                                            categories.get(i["product_id"])}
+                                           for i in e["payload"]["items"]]}
+            e = {**e, "payload": p}
+            changed[NEW_FIELD] += 1
+        if d.schema_v2_from and sent >= d.schema_v2_from:
+            e = {**e, "schema_version": 2}
+            if e["event_type"] == RENAMED[0]:
+                e["payload"] = {(RENAMED[2] if k == RENAMED[1] else k): v
+                                for k, v in e["payload"].items()}
+            changed[SCHEMA_V2] += 1
+        out.append(e)
+    notes = []
+    if changed[NEW_FIELD]:
+        notes.append({"defect": NEW_FIELD, "from": d.new_field_from, "lines": changed[NEW_FIELD],
+                      "field": "order_placed.items[].product_category_name"})
+    if changed[SCHEMA_V2]:
+        notes.append({"defect": SCHEMA_V2, "from": d.schema_v2_from, "lines": changed[SCHEMA_V2],
+                      "renamed": f"{RENAMED[0]}.{RENAMED[1]} -> {RENAMED[2]}"})
+    return out, notes
 
 
 @dataclass(frozen=True)

@@ -178,3 +178,50 @@ def test_a_crash_before_the_events_commit_is_repaired_by_the_retry(ctx):
     bronze_to_silver(ctx, LAST)
     assert count(ctx, "events") == 24
     assert count(ctx, "order_items") == 5  # not duplicated by the re-read
+
+
+def test_the_announced_schema_change_lands_unchanged_in_silver(spark, tmp_path):
+    """New optional field from 5 Jan, schema_version 2 from 8 Jan (spec: reversible defects,
+    announced schema change). Silver holds the same orders, keeps the earlier field name, and
+    stores the new field; nothing is quarantined."""
+    from dataclasses import replace
+
+    from generator.defects import Defects
+    landing = tmp_path / "landing"
+    replay(MINI, landing, FIRST, LAST, purchased_from=FIRST,
+           defects=replace(Defects.only({}), new_field_from="2017-01-05",
+                           schema_v2_from="2017-01-08"))
+    ctx = Context(spark, landing, namespace_prefix=f"t{uuid.uuid4().hex[:8]}_")
+    run_all(ctx)
+    assert count(ctx, "orders") == 6 and count(ctx, "quarantine") == 0
+    versions = {r.schema_version for r in ctx.spark.table(ctx.table("silver", "events"))
+                .select("schema_version").distinct().collect()}
+    assert versions == {1, 2}
+    o = ctx.spark.sql(f"""SELECT customer_zip_code_prefix FROM {ctx.table('silver', 'orders')}
+                          WHERE order_id = 'o_delivered'""").collect()
+    assert o[0][0] == "01310"   # sent as customer_zip_code under version 2
+    items = ctx.spark.table(ctx.table("silver", "order_items")).where(
+        "product_category_name IS NOT NULL").count()
+    assert items > 0
+
+
+def test_fields_the_contract_doesnt_list_are_named(spark):
+    from jobs.contract import load_contracts, unknown_fields
+    base = {"event_id": "x", "event_type": "order_placed", "schema_version": 1,
+            "payload": {"order_id": "o", "customer_zip_code_prefix": "01310",
+                        "items": [{"order_item_id": "1", "product_category_name": "pet"}],
+                        "payments": []}}
+    def line(version=1, **payload):
+        e = json.loads(json.dumps(base))
+        e["schema_version"] = version
+        e["payload"].update(payload)
+        return (json.dumps(e),)
+    extra_item = json.loads(json.dumps(base))
+    extra_item["payload"]["items"][0]["discount"] = "5"
+    rows = [line(), line(coupon="X"), (json.dumps(extra_item),),
+            line(version=2, customer_zip_code="01310"), line(customer_zip_code="01310")]
+    df = spark.createDataFrame(rows, "raw string")
+    got = [sorted(r[0]) for r in df.select(unknown_fields(F.col("raw"), load_contracts())).collect()]
+    # Version 2 renamed the zip field, so under version 2 the old name is the unknown one.
+    assert got == [[], ["coupon"], ["items[].discount"], ["customer_zip_code_prefix"],
+                   ["customer_zip_code"]]

@@ -1,9 +1,10 @@
 """bronze_to_silver: type, check, quarantine and deduplicate events (spec: chronos_daily step 6;
 DataSentinel "Schema contract"; late-data scenario 1).
 
-Each run takes the bronze lines ingested after the last processed ingestion time, up to the
-run's replay time. Phase 1 has no releases yet, so "last processed" is the latest ingested_at
-silver holds; Phase 3 replaces it with the watermark of the last published release.
+Each run takes the bronze lines ingested after the latest ingested_at silver holds, up to the
+run's replay time (jobs/batches.py). The run works on its own branch, which starts from main, so
+that is the watermark of the last published release. Batches a blocked run held are left out
+until someone releases them.
 
 Every line ends in exactly one place:
   - silver.quarantine, with the reasons it breaks the contract, or
@@ -17,8 +18,9 @@ from datetime import date
 from pyspark.sql import DataFrame, Window
 from pyspark.sql import functions as F
 
-from jobs.context import Context, run_id, run_time
-from jobs.contract import load_contracts, problems, raw_schema
+from jobs.batches import in_batch
+from jobs.context import Context, on_run_branch, run_id
+from jobs.contract import load_contracts, problems, raw_schema, to_earliest_names
 
 TS = "timestamp_ntz"
 MONEY = "decimal(12,2)"
@@ -39,7 +41,7 @@ TABLES = {
     "order_items": """
         event_id STRING, order_id STRING, order_item_id INT, product_id STRING,
         seller_id STRING, shipping_limit_date TIMESTAMP_NTZ, price DECIMAL(12,2),
-        freight_value DECIMAL(12,2)""",
+        freight_value DECIMAL(12,2), product_category_name STRING""",
     "order_payments": """
         event_id STRING, order_id STRING, payment_sequential INT, payment_type STRING,
         payment_installments INT, payment_value DECIMAL(12,2)""",
@@ -62,11 +64,25 @@ KEYS = {
 }
 
 
+# Columns added to a table after it was first created, in order: tables created before a
+# contract change get them by ALTER TABLE. Iceberg adds a column as a metadata change only, and
+# older rows read it as null; nothing is rewritten.
+ADDED_COLUMNS = {
+    # The announced optional field (contracts/events_v1.json), sent from 2017-02-01.
+    "order_items": [("product_category_name", "STRING")],
+}
+
+
 def ensure_silver_tables(ctx: Context) -> None:
     ctx.spark.sql(f"CREATE NAMESPACE IF NOT EXISTS {ctx.namespace('silver')}")
     for name, columns in TABLES.items():
-        ctx.spark.sql(f"""CREATE TABLE IF NOT EXISTS {ctx.table('silver', name)} ({columns})
+        table = ctx.table("silver", name)
+        ctx.spark.sql(f"""CREATE TABLE IF NOT EXISTS {table} ({columns})
                           USING iceberg TBLPROPERTIES ('format-version' = '2')""")
+        have = set(ctx.spark.table(table).columns)
+        for column, kind in ADDED_COLUMNS.get(name, []):
+            if column not in have:
+                ctx.spark.sql(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
 
 
 def processed_up_to(ctx: Context):
@@ -82,25 +98,26 @@ def processed_up_to(ctx: Context):
 
 
 def read_batch(ctx: Context, business_date: date) -> DataFrame:
-    upper = F.lit(run_time(business_date).isoformat(sep=" ")).cast(TS)
-    batch = ctx.spark.table(ctx.table("bronze", "events")).where(F.col("ingested_at") <= upper)
-    done = processed_up_to(ctx)
-    if done is not None:
-        batch = batch.where(F.col("ingested_at") > F.lit(done.isoformat(sep=" ")).cast(TS))
-    return batch
+    """Bronze lines after what silver holds, up to run time, without held or rejected batches."""
+    return ctx.spark.table(ctx.table("bronze", "events")).where(
+        in_batch(ctx, business_date, processed_up_to(ctx)))
 
 
 def check(batch: DataFrame, contracts: dict[int, dict]) -> DataFrame:
-    """Parse each line and attach the reasons it breaks the contract (empty when it is fine)."""
-    # Phase 1 knows one schema version; Phase 2's announced schema change adds the second and
-    # picks the contract by each line's version.
-    contract = contracts[max(contracts)]
-    parsed = batch.withColumn("e", F.from_json("raw", raw_schema(contract)))
-    reasons = (F.when(F.get_json_object("raw", "$").isNull(), F.array(F.lit("invalid_json")))
-               .when(~F.col("e.schema_version").isin(list(contracts)),
-                     F.array(F.lit("unknown_schema_version")))
-               .otherwise(problems(F.col("e"), contract)))
-    return parsed.withColumn("reasons", reasons)
+    """Parse each line and attach the reasons it breaks the contract (empty when it is fine).
+
+    Each line is judged by its own schema_version's contract: after a version change, late and
+    resent events still arrive in the old one. Renamed fields are then copied back to their
+    earlier names, so the row builders below read one set of names for every version.
+    """
+    parsed = batch.withColumn("e", F.from_json("raw", raw_schema(*contracts.values())))
+    reasons = F.when(F.get_json_object("raw", "$").isNull(), F.array(F.lit("invalid_json")))
+    for version, contract in sorted(contracts.items()):
+        reasons = reasons.when(F.col("e.schema_version") == version,
+                               problems(F.col("e"), contract))
+    reasons = reasons.otherwise(F.array(F.lit("unknown_schema_version")))
+    return (parsed.withColumn("reasons", reasons)
+            .withColumn("e", to_earliest_names(F.col("e"), contracts)))
 
 
 def first_per_event_id(accepted: DataFrame) -> DataFrame:
@@ -141,7 +158,8 @@ def items_rows(d: DataFrame) -> DataFrame:
                     F.col("i.product_id").alias("product_id"), F.col("i.seller_id").alias("seller_id"),
                     F.col("i.shipping_limit_date").cast(TS).alias("shipping_limit_date"),
                     F.col("i.price").cast(MONEY).alias("price"),
-                    F.col("i.freight_value").cast(MONEY).alias("freight_value")))
+                    F.col("i.freight_value").cast(MONEY).alias("freight_value"),
+                    F.col("i.product_category_name").alias("product_category_name")))
 
 
 def payments_rows(d: DataFrame) -> DataFrame:
@@ -193,6 +211,7 @@ def merge_new(ctx: Context, name: str, rows: DataFrame) -> int:
     return count
 
 
+@on_run_branch
 def bronze_to_silver(ctx: Context, business_date: date) -> dict:
     ensure_silver_tables(ctx)
     checked = check(read_batch(ctx, business_date), load_contracts()).localCheckpoint()

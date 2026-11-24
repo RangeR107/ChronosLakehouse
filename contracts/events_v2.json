@@ -1,0 +1,215 @@
+{
+  "schema_version": 2,
+  "description": "Order-lifecycle events, schema version 2, announced for 2017-02-15. The same as version 1 except that order_placed's customer_zip_code_prefix is renamed customer_zip_code. 'renamed_from' names the version 1 field, which is what silver keeps, so nothing downstream changes.",
+  "envelope": {
+    "event_id": "string",
+    "event_type": "string",
+    "logical_key": "string",
+    "version": "int",
+    "supersedes_event_id": "string",
+    "schema_version": "int",
+    "event_time": "timestamp",
+    "emitted_at": "timestamp",
+    "payload": "object"
+  },
+  "event_types": {
+    "order_placed": {
+      "logical_key": [
+        "order_id"
+      ],
+      "event_time_field": "order_purchase_timestamp",
+      "payload": {
+        "order_id": {
+          "type": "string",
+          "required": true
+        },
+        "customer_id": {
+          "type": "string",
+          "required": true
+        },
+        "customer_unique_id": {
+          "type": "string",
+          "required": true
+        },
+        "customer_zip_code": {
+          "type": "string",
+          "required": true,
+          "renamed_from": "customer_zip_code_prefix"
+        },
+        "customer_city": {
+          "type": "string",
+          "required": true
+        },
+        "customer_state": {
+          "type": "string",
+          "required": true
+        },
+        "order_purchase_timestamp": {
+          "type": "timestamp",
+          "required": true
+        },
+        "order_estimated_delivery_date": {
+          "type": "timestamp",
+          "required": true
+        },
+        "items": {
+          "type": "array",
+          "required": true,
+          "element": {
+            "order_item_id": {
+              "type": "int",
+              "required": true
+            },
+            "product_id": {
+              "type": "string",
+              "required": true
+            },
+            "seller_id": {
+              "type": "string",
+              "required": true
+            },
+            "shipping_limit_date": {
+              "type": "timestamp",
+              "required": true
+            },
+            "price": {
+              "type": "decimal(12,2)",
+              "required": true
+            },
+            "freight_value": {
+              "type": "decimal(12,2)",
+              "required": true
+            },
+            "product_category_name": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "payments": {
+          "type": "array",
+          "required": true,
+          "element": {
+            "payment_sequential": {
+              "type": "int",
+              "required": true
+            },
+            "payment_type": {
+              "type": "string",
+              "required": true
+            },
+            "payment_installments": {
+              "type": "int",
+              "required": true
+            },
+            "payment_value": {
+              "type": "decimal(12,2)",
+              "required": true
+            }
+          }
+        }
+      }
+    },
+    "payment_approved": {
+      "logical_key": [
+        "order_id"
+      ],
+      "event_time_field": "order_approved_at",
+      "payload": {
+        "order_id": {
+          "type": "string",
+          "required": true
+        },
+        "order_approved_at": {
+          "type": "timestamp",
+          "required": true
+        }
+      }
+    },
+    "handed_to_carrier": {
+      "logical_key": [
+        "order_id"
+      ],
+      "event_time_field": "order_delivered_carrier_date",
+      "payload": {
+        "order_id": {
+          "type": "string",
+          "required": true
+        },
+        "order_delivered_carrier_date": {
+          "type": "timestamp",
+          "required": true
+        }
+      }
+    },
+    "delivered": {
+      "logical_key": [
+        "order_id"
+      ],
+      "event_time_field": "order_delivered_customer_date",
+      "payload": {
+        "order_id": {
+          "type": "string",
+          "required": true
+        },
+        "order_delivered_customer_date": {
+          "type": "timestamp",
+          "required": false
+        }
+      }
+    },
+    "order_cancelled": {
+      "logical_key": [
+        "order_id"
+      ],
+      "event_time_field": null,
+      "payload": {
+        "order_id": {
+          "type": "string",
+          "required": true
+        }
+      }
+    },
+    "order_unavailable": {
+      "logical_key": [
+        "order_id"
+      ],
+      "event_time_field": null,
+      "payload": {
+        "order_id": {
+          "type": "string",
+          "required": true
+        }
+      }
+    },
+    "review_submitted": {
+      "logical_key": [
+        "order_id",
+        "review_id"
+      ],
+      "event_time_field": "review_answer_timestamp",
+      "payload": {
+        "order_id": {
+          "type": "string",
+          "required": true
+        },
+        "review_id": {
+          "type": "string",
+          "required": true
+        },
+        "review_score": {
+          "type": "int",
+          "required": true
+        },
+        "review_creation_date": {
+          "type": "timestamp",
+          "required": true
+        },
+        "review_answer_timestamp": {
+          "type": "timestamp",
+          "required": true
+        }
+      }
+    }
+  }
+}
