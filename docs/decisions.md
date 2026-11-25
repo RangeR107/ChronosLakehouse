@@ -226,7 +226,8 @@ before the phase that depends on it).
 
 ## 2026-11-22 · Phase 1 event model: choices the spec leaves open
 
-- **Status:** proposed (each is reversible until bronze holds real replays)
+- **Status:** agreed (owner, 25 Nov 2026: approved as proposed); each is reversible until bronze
+  holds real replays
 - **review_submitted event time = `review_answer_timestamp`.** The spec lists both review
   timestamps for one event. The answer time is when the customer actually submitted it;
   `review_creation_date` is when the survey was sent. Both stay in the payload.
@@ -330,7 +331,7 @@ before the phase that depends on it).
 
 ## 2026-11-22 · PostgreSQL tests run in CI against a service container
 
-- **Status:** proposed
+- **Status:** agreed (owner, 25 Nov 2026: approved as proposed)
 - **What:** tests that need PostgreSQL carry the `postgres` marker and use a throwaway database
   per test, created and dropped by `tests/conftest.py`. CI starts `postgres:16.16` as a GitHub
   Actions service container and sets `CHRONOS_REQUIRE_POSTGRES=1`, so these tests run on every
@@ -345,7 +346,7 @@ before the phase that depends on it).
 
 ## 2026-11-22 · Bronze: replay-time ingestion, events before manifest, raw lines kept
 
-- **Status:** proposed
+- **Status:** agreed (owner, 25 Nov 2026: approved as proposed)
 - **ingested_at is replay time, not wall-clock time:** the run for business date D stamps
   `D + 1 day 00:00:00`, just after the day closes on the replay clock. A retry then produces
   identical rows (the idempotency test compares checksums), and "rebuild as known at time T"
@@ -371,7 +372,7 @@ before the phase that depends on it).
 
 ## 2026-11-22 · extract_dimensions: upper bound at replay time, mark derived from bronze
 
-- **Status:** proposed
+- **Status:** agreed (owner, 25 Nov 2026: approved as proposed)
 - **Upper bound:** besides the spec's lower bound (updated_at later than the high-water mark
   minus one day), the extract reads only rows with updated_at earlier than the run's replay
   time (`D + 1 day 00:00:00`). The generator can run ahead of the pipeline, so without the bound
@@ -394,7 +395,7 @@ before the phase that depends on it).
 
 ## 2026-11-22 · Silver: contract-driven checks, insert-only MERGEs, events written last
 
-- **Status:** proposed
+- **Status:** agreed (owner, 25 Nov 2026: approved as proposed)
 - **What a run reads:** bronze lines ingested after the latest `ingested_at` in `silver.events`,
   up to the run's replay time. Phase 1 has no releases, so this stands in for the spec's
   "last published watermark"; Phase 3 swaps in the release manifest's watermark. A run after a
@@ -440,7 +441,7 @@ before the phase that depends on it).
 
 ## 2026-11-22 · build_dimensions: recompute, then MERGE only what changed
 
-- **Status:** proposed
+- **Status:** agreed (owner, 25 Nov 2026: approved as proposed)
 - **Recompute and compare:** each run derives every dimension from bronze extracts and silver as
   the run could see them (rows extracted by its replay time), then MERGEs only rows that differ
   from gold, compared null-safely. An unchanged rerun commits nothing. Recomputing the SCD Type 2
@@ -467,7 +468,7 @@ before the phase that depends on it).
 
 ## 2026-11-23 · build_facts: rebuild touched orders whole; the ledger holds the mark
 
-- **Status:** proposed
+- **Status:** agreed (owner, 25 Nov 2026: approved as proposed)
 - **What a run rebuilds** (superseded on 24 Nov: new events are found by event id; see "A blocked
   run's batches are held"): the orders with events silver received after the latest
   `ingested_at` in `gold.fact_order_events`, up to the run's replay time. Each touched order's
@@ -498,7 +499,7 @@ before the phase that depends on it).
 
 ## 2026-11-23 · First aggregate, serving load and dashboard
 
-- **Status:** proposed
+- **Status:** agreed (owner, 25 Nov 2026: approved as proposed)
 - **Aggregate:** `gold.agg_delivery_by_month_region` (questions 1 and 2) at the grain of
   measure_spec.py's `q1_q2_delivery_by_month_region.csv`: delivery month x delivery region plus
   an `all` slice. Percentiles interpolate linearly, as pandas does. Phase 1 recomputes it whole;
@@ -517,7 +518,7 @@ before the phase that depends on it).
 
 ## 2026-11-23 · The Phase 1 truth test
 
-- **Status:** proposed
+- **Status:** agreed (owner, 25 Nov 2026: approved as proposed)
 - **What:** `tests/truth/test_truth_slice.py` replays the slice into a throwaway database and
   namespace, runs all 60 days through `run_day`, and compares fact_order_fulfillment,
   fact_order_items, fact_payments, fact_reviews, dim_customer, dim_geography, dim_seller,
@@ -536,7 +537,7 @@ before the phase that depends on it).
 
 ## 2026-11-23 · One seller city in decomposed Unicode (found by the truth test)
 
-- **Status:** proposed
+- **Status:** agreed (owner, 25 Nov 2026: approved as proposed)
 - **Finding:** one seller's city is "são paulo" written as `a` + U+0303 (combining tilde) rather
   than the single letter `ã`. The accent map didn't cover combining marks, so the pipeline made
   it a second São Paulo in dim_geography; the DuckDB reference (`strip_accents`) didn't. The
@@ -565,8 +566,8 @@ before the phase that depends on it).
 
 ## 2026-11-23 · Phase 2: the Airflow image and DAGs
 
-- **Status:** proposed (the image and DAG were agreed for the start of Phase 2; these are the
-  details)
+- **Status:** agreed (owner, 25 Nov 2026: approved as proposed); the image and DAG were agreed
+  for the start of Phase 2; these are the details
 - **Image:** `airflow_local/Dockerfile`, on `apache/airflow:3.4.0-python3.11`. Java 17 is
   copied from `eclipse-temurin:17.0.21_9-jre-noble`: the Airflow image's Debian release has no
   OpenJDK 17 package (only 21), and the newer 17.0.21.1 Temurin tag has no arm64 build.
@@ -592,7 +593,7 @@ before the phase that depends on it).
 
 ## 2026-11-23 · Phase 2: reversible defects and the ground truth
 
-- **Status:** proposed
+- **Status:** agreed (owner, 25 Nov 2026: approved as proposed)
 - **Generator:** `generator/defects.py`, at the spec's suggested rates. Each decision is a
   SHA-256 of (seed, defect, event or order), so the same event gets the same defect in every
   replay and any slice. Tests can script defects exactly with `Defects.only({...})`.
@@ -813,7 +814,7 @@ before the phase that depends on it).
 
 ## 2026-11-23 · No `depends_on_past` in chronos_daily; open_run guards a half-finished publish
 
-- **Status:** proposed
+- **Status:** agreed (owner, 25 Nov 2026: approved as proposed)
 - **What:**
   - `chronos_daily` no longer sets `depends_on_past` and `wait_for_downstream` (added in
     Phase 2). Dates stay serial through `max_active_runs = 1` (the spec's rule) and, for a
@@ -845,7 +846,7 @@ before the phase that depends on it).
 
 ## 2026-11-24 · Faster audits: one GX suite per table, and maintenance_weekly built now
 
-- **Status:** proposed
+- **Status:** agreed (owner, 25 Nov 2026: approved as proposed)
 - **Why now:** a run took 27.6 s on day 46 of the real slice and kept growing. At that rate the
   evaluation replay would take more than a day. Per step on 15 Feb:
   - GX key checks: 10.5 s
@@ -938,7 +939,8 @@ before the phase that depends on it).
 
 ## 2026-11-24 · Landing problems are reported once, when they are new
 
-- **Status:** proposed (found by the evaluation's smoke run)
+- **Status:** agreed (owner, 25 Nov 2026: approved as proposed); found by the evaluation's smoke
+  run
 - **What:** the completeness check looks back over 10 days of landing folders, so it can see
   late files. It used to report everything it saw on every run. Now:
   - an unlisted file blocks only the run that first sees it, and its batch is then held;
@@ -957,7 +959,8 @@ before the phase that depends on it).
 
 ## 2026-11-24 · Maintenance ignores a blocked run's kept branches
 
-- **Status:** proposed (found by the evaluation's smoke run)
+- **Status:** agreed (owner, 25 Nov 2026: approved as proposed); found by the evaluation's smoke
+  run
 - **What:** `maintain()` refused while any run branch existed. A blocked run keeps its branches
   for inspection, so after the first block maintenance never ran again. Now it ignores the
   branches of runs recorded as `blocked`; they are dead ends, never fast-forwarded. Once every
@@ -967,8 +970,8 @@ before the phase that depends on it).
 
 ## 2026-11-24 · The evaluation replay: design and scoring rules, fixed before any results
 
-- **Status:** proposed (decided before the test period ran; changing these after seeing test
-  results would be tuning on the test set)
+- **Status:** agreed (owner, 25 Nov 2026: approved as proposed); decided before the test period
+  ran; changing these after seeing test results would be tuning on the test set
 - **Isolation:** its own database (`chronos_eval`: source, serving, metrics), lake (`lake/eval/`)
   and namespaces (`eval_`). The harness is `tests/evaluation/evaluate.py`, under tests/ because
   it reads the ground-truth manifest.
@@ -1074,7 +1077,7 @@ before the phase that depends on it).
 ## 2026-11-24 · The announced schema change
 
 - **Status:** agreed (spec: reversible defects, "Announced schema change", once each); the
-  choice of fields and dates is proposed
+  choice of fields and dates agreed (owner, 25 Nov 2026)
 - **What:**
   - *New optional field, from 1 Feb 2017:* order items carry `product_category_name`, Olist's
     real category for the product. The version 1 contract lists it as optional ("announced"),
@@ -1157,8 +1160,9 @@ before the phase that depends on it).
 
 ## 2026-11-24 · Evaluation scoring: bad data is the anomaly day's own copy
 
-- **Status:** proposed (a measurement fix in the harness, made after the first test-period
-  scoring, and disclosed here because it changed a reported number)
+- **Status:** agreed (owner, 25 Nov 2026: approved as proposed); a measurement fix in the
+  harness, made after the first test-period scoring, and disclosed here because it changed a
+  reported number
 - **What was wrong:** "published with bad data" matched event ids alone. A reversible duplicate
   resends an event with Olist's content in a later day's file, under the same event id, so
   blocked anomalies looked leaked (schema breaks: 30 of 30, all of them blocked).
