@@ -77,8 +77,8 @@ shared_definitions:
     definition: >-
       The score of the order's review. When an order has several reviews, take the latest by
       review_creation_date, then by review_answer_timestamp, then the highest review_id. The
-      tie-breakers matter: creation dates have no time of day, and 156 of the 547 orders with
-      several reviews tie on the latest one (Kaggle download).
+      tie-breakers matter: creation dates almost never have a time of day (85 of 99,224 do),
+      and 156 of the 547 orders with several reviews tie on the latest one (Kaggle download).
     order_by_desc: [review_creation_date, review_answer_timestamp, review_id]
 
 metrics:

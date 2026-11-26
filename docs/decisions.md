@@ -257,14 +257,29 @@ before the phase that depends on it).
 
 ## 2026-11-22 · Two review facts the spec doesn't state
 
-- **Status:** open (spec wording, and one possible DataSentinel flag)
+- **Status:** agreed (owner, 25 Nov 2026: "Yes, settle it"), as a change to the documents only,
+  with no flag in code (see the second fact)
 - **85 review creation dates have a time of day.** The spec says creation dates have none. The
-  order-review tie-breakers still work, but "Shared definitions: Order review score" and the Q4/Q7
-  notes should say "almost never".
+  order-review tie-breakers still work, but "Shared definitions: Order review score" should say
+  "almost never".
+  - *Done:* the spec, `docs/metrics.yml` and `docs/phase-0-notes.md` now say creation dates
+    almost never have a time of day (85 of 99,224 do). The Q4 and Q7 notes turned out not to
+    make the claim, so they are unchanged.
 - **63 reviews were answered before their order was purchased** (64 created before the purchase
   date). This is a real source defect that the Real defects table doesn't list. Proposal: add it
   as a Flag, kept in the reviews fact and left out of nothing, since no metric uses review timing.
-- **Spec sections:** Shared definitions (Order review score); Data sources (Real defects table).
+  - *Done differently:* added to the Real defects table with severity "None: documented", not
+    "Flag". In this spec a Flag isn't only a note: it is a `dq_flags` value on the row and a
+    known-defect check (`DEFECT_FLAGS` in `sentinel/checks/anomalies.py`) that blocks a day when
+    the rate jumps. That would need a `dq_flags` column on `fact_reviews`, a baseline measured
+    on the tuning period, and the same rule in the DuckDB reference build. It would also put a
+    blocking check into the pipeline that the held-out evaluation never measured. Since no
+    metric uses review timing, recording the defect is enough.
+  - *Alternative, not taken:* the full Flag, with the work above and a rerun of the truth test.
+- **Numbers re-measured** on 25 Nov 2026 with DuckDB on the Kaggle files: 85 creation dates with
+  a time of day, 63 answered before purchase, 64 created before the purchase date.
+- **Spec sections updated:** Shared definitions (Order review score); Data sources (Real defects
+  table).
 
 ## 2026-11-22 · PostgreSQL driver: psycopg 3
 
@@ -1196,3 +1211,39 @@ before the phase that depends on it).
   alarm: it releases the blocked day. The next run takes the batch in, and
   `test_every_held_batch_was_released_and_published` checks that nothing is left held. The
   business tables must still equal the reference.
+
+## 2026-11-25 · No AWS account: Phase 4 is not deployed
+
+- **Status:** agreed (owner, 25 Nov 2026: "skipping aws", then "Go to Phase 5"): Phase 4 is
+  skipped entirely, and no AWS-ready code is written
+- **What:** the owner stopped the AWS sign-up before it finished. No account exists, nothing is
+  created in AWS, and no credits are used. The free plan's six-month clock never started, so
+  a later sign-up is still possible.
+- **Why:** the owner doesn't want to spend credits.
+  - *Estimated cost of the spec's Phase 4:* $40 to $65 of the $100 sign-up credits, almost all
+    of it Glue running the full 785-day replay. A job per step per day would cost more than
+    $100.
+  - *A light version, also declined:* S3, the Glue Data Catalog and Athena for a slice, plus
+    one Glue run, would have cost about $2 to $5.
+- **What this changes:**
+  - Phase 4's "Done when" ("a full truth replay runs on AWS") can't be met.
+  - The spec's summary and résumé lines claim S3, Glue and Athena. They must say "designed for
+    AWS" or drop it, so nothing claims what wasn't run.
+  - The pipeline itself is unchanged and already complete locally: Spark, Iceberg, Airflow,
+    PostgreSQL and the evaluation.
+- **Alternatives:**
+  - Light AWS (about $2 to $5).
+  - The full plan (about $40 to $65).
+  - A local S3 stand-in such as MinIO. That is a new tool the spec doesn't name; not proposed
+    unless the owner asks.
+- **Spec updated:**
+  - a note under the title that nothing ran on AWS;
+  - the tagline, the Summary and its platform bullet;
+  - Architecture's opening and its Terraform line, and the repository layout (no `infra/`; the
+    empty folder is removed);
+  - the Phase 4 row (skipped) and Phase 5's (no Glue 6.0 migration);
+  - Zero cost, and the performance numbers (local runtimes filled in; AWS ones not applicable);
+  - the résumé bullets (no S3, Glue, Athena or Terraform claims, measured numbers filled in);
+  - the interview table.
+- **Left as they are:** the AWS design sections (Glue versions, S3A region, the Athena time
+  travel), read as the planned cloud equivalent per the note under the title.

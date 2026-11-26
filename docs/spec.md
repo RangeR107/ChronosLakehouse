@@ -1,12 +1,14 @@
 # Chronos – Project Specification
 
-Nov 22, 2026 · @RangeR · Revision 5
+Nov 22, 2026 · @RangeR · Revision 5 (updated 25 Nov 2026: Phase 4, the AWS deployment, was skipped)
 
-A batch lakehouse on AWS that replays real Olist marketplace orders as a late, messy event feed, turns them into a trusted star schema, and publishes only complete, audited releases.
+> **No AWS deployment.** On 25 Nov 2026 the owner chose to skip Phase 4, so no AWS account exists and nothing here ran on AWS (Decision log, 2026-11-25). Everything runs locally: Spark and Iceberg on a Hadoop catalog, Airflow and PostgreSQL in Docker. The AWS parts of this spec (S3, Glue, the Glue Data Catalog, Athena, Terraform) describe the cloud design the code is built to move to; they are a plan, not something built.
+
+A batch lakehouse, built locally and designed for AWS, that replays real Olist marketplace orders as a late, messy event feed, turns them into a trusted star schema, and publishes only complete, audited releases.
 
 ## Summary
 
-Chronos is a batch lakehouse on AWS. It replays about 100,000 real Olist marketplace orders as a daily feed of events. Some events arrive late, twice, out of order or briefly wrong, and the pipeline turns the feed into a trusted star schema anyway. Its quality gate, DataSentinel, publishes a day's data only after it passes its checks, and dashboards switch from one complete release to the next, never to half of one.
+Chronos is a batch lakehouse, built and run locally and designed to move to AWS. It replays about 100,000 real Olist marketplace orders as a daily feed of events. Some events arrive late, twice, out of order or briefly wrong, and the pipeline turns the feed into a trusted star schema anyway. Its quality gate, DataSentinel, publishes a day's data only after it passes its checks, and dashboards switch from one complete release to the next, never to half of one.
 
 Every business fact comes from Olist. The only simulated part is how and when data arrives. Every simulated defect is recorded and later reversed, so once every delayed event has arrived, the warehouse's business tables must equal what Olist recorded, and a test checks exactly that (see What's real and what's simulated).
 
@@ -15,7 +17,7 @@ Every business fact comes from Olist. The only simulated part is how and when da
 - **Dimensional modeling:** declared grains, an accumulating snapshot, role-playing date and geography dimensions, SCD Type 2 with honestly labelled inferred dates, and inferred members.
 - **Pipeline correctness:** idempotent reruns; late, duplicate and out-of-order events; corrections; late dimension changes; and metrics "as first reported" versus "as known now".
 - **Data quality and releases:** write-audit-publish on Iceberg branches, a release manifest that keeps tables consistent for readers, severity levels that separate bad source rows from bad runs, and measured detection accuracy.
-- **AWS:** S3, Glue, Apache Iceberg, Athena on the AWS free plan, with PostgreSQL serving the dashboards, orchestrated by Airflow and defined in Terraform. The whole project costs nothing.
+- **Platform:** PySpark and Apache Iceberg locally, with PostgreSQL serving the dashboards, orchestrated by Airflow, all in Docker on a laptop. Designed to move to S3, Glue and Athena on the AWS free plan, defined in Terraform; that move (Phase 4) was skipped. The whole project costs nothing.
 
 **Scope rule:** every component answers a business question or protects correctness. EMR, streaming and search services stay out: Glue already provides managed Spark, and no question here needs results faster than daily.
 
@@ -80,7 +82,7 @@ Every dashboard number comes from one written definition in docs/metrics.yml, an
 | Qualifying purchase | An order whose status is not canceled or unavailable. Open orders count, because the customer did buy; this is a deliberate choice, used by question 5 |
 | Merchandise revenue | Sum of item prices in Brazilian reais (BRL) for orders whose status is not canceled or unavailable, by purchase date. Freight is reported separately; payment values are used only to reconcile payments against items |
 | Region | IBGE region of a location: the order's delivery address for customer metrics, the seller's address for seller metrics |
-| Order review score | The order's review. When an order has several (547 orders in the Kaggle download), take the latest by creation date, then by answer time, then the highest review\_id. The tie-breakers matter: creation dates have no time of day, and 156 of those 547 orders tie on it |
+| Order review score | The order's review. When an order has several (547 orders in the Kaggle download), take the latest by creation date, then by answer time, then the highest review\_id. The tie-breakers matter: creation dates almost never have a time of day (85 of 99,224 do), and 156 of those 547 orders tie on it |
 
 **The eight questions**
 
@@ -157,6 +159,7 @@ The base is the Brazilian E-Commerce Public Dataset by Olist: about 100,000 real
 | Order with no payment rows | 1 order | Flag | Left out of payment reconciliation |
 | Payments differ from items plus freight by more than 1 BRL | 249 orders | Flag | None on revenue, which uses item prices; listed in the payment reconciliation report |
 | Same review\_id on two or more orders | 789 review\_ids | None: expected | The review grain is review\_id plus order\_id |
+| Review answered before its order was purchased | 63 reviews (64 created before the purchase date) | None: documented | None: no metric uses review timing, so the rows stay as they are |
 | Products with no category | 610 | Flag | Grouped as "unknown" |
 | Categories with no English translation | 2 (pc\_gamer, portateis\_cozinha\_e\_preparadores\_de\_alimentos) | Warn once | Keep the Portuguese name |
 | Payment rows with value 0 | 9 | Flag | None on revenue |
@@ -185,7 +188,7 @@ What the project needs from its data: linked tables; a timestamp per lifecycle s
 
 ## Architecture
 
-Data flows through six layers. Every write to silver and gold lands on a per-run Iceberg branch, and only DataSentinel can publish it, as a complete release. Build everything locally first, then move storage, compute and serving to AWS in Phase 4.
+Data flows through six layers. Every write to silver and gold lands on a per-run Iceberg branch, and only DataSentinel can publish it, as a complete release. Everything is built and runs locally. Moving storage, compute and serving to AWS was planned for Phase 4 and skipped (Decision log, 2026-11-25); where the tables below name an AWS service, that is the planned cloud equivalent of the local piece.
 
 - **Sources.** PostgreSQL (in Docker) is the customer, seller and product master. Sellers and products are loaded from Olist once. The generator inserts a customer at their first order and updates the row when an order arrives with a new address, as an operational system would. Separately, the replay generator writes order-lifecycle events as hourly JSON Lines files, plus a completion marker per day, into an S3 landing/ prefix.
 - **Bronze.** Landing files are never modified. A file manifest records every file loaded: path, ETag, size, row count and run. An append-only Iceberg table stores each event as received, with source\_file, line number and ingested\_at. A file already in the manifest is never loaded twice, so a retry adds nothing, while a genuinely redelivered event in a new file is kept here and deduplicated in silver. That gives both a full audit trail and idempotency.
@@ -194,7 +197,7 @@ Data flows through six layers. Every write to silver and gold lands on a per-run
 - **Release.** DataSentinel audits the run's branches and, if nothing blocks, publishes them as one release (see Publishing).
 - **Serving.** Athena for ad-hoc queries, audits and time travel over the lake; PostgreSQL tables for dashboards, loaded one release at a time in a single transaction; Streamlit (or Power BI) for the dashboards themselves.
 
-Airflow orchestrates every step. Terraform defines the AWS resources, and GitHub Actions runs the tests on each push.
+Airflow orchestrates every step, and GitHub Actions runs the tests on each push. Terraform would define the AWS resources; with Phase 4 skipped, none is written.
 
 | Layer | Tool | Why this choice |
 | --- | --- | --- |
@@ -228,7 +231,6 @@ chronos/
   dags/               chronos_daily.py, maintenance_weekly.py
   sql/                PostgreSQL serving DDL, release load and MERGE scripts, Athena and DuckDB audit queries
   tests/              unit/, scenarios/, truth/, evaluation/
-  infra/              Terraform
   docs/               metrics.yml, architecture, data model, decision log, runbook
 ```
 
@@ -519,10 +521,10 @@ The project's credibility rests on two pieces of evidence: tests proving the pip
 
 **Performance numbers to record**
 
-- Runtime of a daily run, and backfill throughput in days per hour.
-- Athena data scanned for the same dashboard query on raw JSON versus partitioned Iceberg tables.
+- Runtime of a daily run, and backfill throughput in days per hour. Measured locally (24 Nov 2026, the evaluation replay on a laptop): 17 to 30 seconds a day, about 120 to 200 days an hour.
+- Athena data scanned for the same dashboard query on raw JSON versus partitioned Iceberg tables. Not measured: Phase 4 was skipped.
 - Dashboard query time in PostgreSQL before and after adding indexes on the serving tables.
-- Free-plan credits used per daily run, from the AWS Billing console, not an estimate.
+- Free-plan credits used per daily run, from the AWS Billing console, not an estimate. Not applicable: Phase 4 was skipped. The estimate it was skipped on is in the Decision log (2026-11-25).
 
 **Optional load test, clearly labelled.** About 100,000 orders is small. If you want scaling numbers, copy the replay K times with new ids into a separate load-test namespace, and report only runtime and cost from it, never business numbers. Say "load-tested at K times the real volume", not "processed K million orders".
 
@@ -577,8 +579,8 @@ Build in six phases over roughly 15 weeks alongside college; each phase ends in 
 | 1. Happy path | 2 to 4 | Generator without defects; bronze with its file manifest, silver and gold locally; fact\_order\_items, fact\_order\_fulfillment, dim\_customer as SCD Type 2, dim\_geography; first dashboard | The truth test passes on 60 replayed days, and rerunning any day gives identical output |
 | 2. Late data | 5 to 7 | Reversible defects and the manifest; deduplication; milestone rules; corrections; inferred members; late dimension changes; dirty-date recompute; published metrics and the restatement report | The custom Airflow image and chronos\_daily run a serial backfill; all nine scenario tests and the fixture truth test pass in CI with defects on; the real-slice truth test passes locally (`make truth`) |
 | 3. DataSentinel and releases | 8 to 11 | Branch-based write-audit-publish; release manifest and tags; severity levels; GX checks; volume, freshness and drift detection; metrics store; Streamlit console; alerts; evaluation replay | The evaluation report on the held-out period is written, the release consistency test passes, scenario 8's main-unchanged check passes (its expected-failure marker removed), and rerunning a published date republishes nothing |
-| 4. AWS | 12 to 14 | S3, Glue 5.1, Glue Data Catalog, Athena; Airflow driving AWS; release loads into PostgreSQL; Terraform; everything on the AWS free plan | A full truth replay runs on AWS, with runtime and credits used recorded, and $0 charged |
-| 5. Finish | 15 | README, architecture and data-model diagrams, decision log, short write-up, demo video; optional load test; optional Glue 6.0 migration | A stranger can run it from the README and understand the results in five minutes |
+| 4. AWS (skipped) | – | Planned: S3, Glue 5.1, Glue Data Catalog, Athena; Airflow driving AWS; Terraform; on the AWS free plan. Skipped by the owner on 25 Nov 2026 to use no AWS credits (Decision log); the design stays in Architecture and Zero cost | Not applicable |
+| 5. Finish | 15 | README, architecture and data-model diagrams, decision log, short write-up, demo video; optional load test | A stranger can run it from the README and understand the results in five minutes |
 
 If an interview arrives mid-build, talk about the phase you have finished and what comes next. A correct local pipeline beats a half-working cloud one.
 
@@ -648,7 +650,7 @@ This test hasn't been run: the workspace where this spec was written couldn't do
 
 ## Zero cost: AWS free plan and safety
 
-The whole project is built to cost nothing. Phases 0 to 3 and 5 run on your laptop with free, open-source tools. Phase 4 uses an AWS account on the free account plan, which AWS describes as ensuring you won't incur any charges while you explore AWS services ([AWS](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier-plans.html)). The plan ends after 6 months or when its credits run out, whichever comes first, and it won't charge you until you upgrade to a paid plan ([AWS blog](https://aws.amazon.com/pt/blogs/aws/aws-free-tier-update-new-customers-can-get-started-and-explore-aws-with-up-to-200-in-credits/)).
+Phase 4 was skipped (25 Nov 2026), so no AWS account exists; the rules below apply only if the AWS move is ever made. The whole project is built to cost nothing. Phases 0 to 3 and 5 run on your laptop with free, open-source tools. Phase 4 uses an AWS account on the free account plan, which AWS describes as ensuring you won't incur any charges while you explore AWS services ([AWS](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier-plans.html)). The plan ends after 6 months or when its credits run out, whichever comes first, and it won't charge you until you upgrade to a paid plan ([AWS blog](https://aws.amazon.com/pt/blogs/aws/aws-free-tier-update-new-customers-can-get-started-and-explore-aws-with-up-to-200-in-credits/)).
 
 **What runs where**
 
@@ -678,9 +680,9 @@ The whole project is built to cost nothing. Phases 0 to 3 and 5 run on your lapt
 
 Use three bullets, and replace every \[N\] with a number you measured. Don't add the project to your resume until Phase 2 is done, and claim scale only if you ran the labelled load test.
 
-- Built Chronos, an AWS lakehouse (S3, Glue PySpark, Apache Iceberg, Athena, PostgreSQL, Airflow, Terraform) that replays \~100K real Olist marketplace orders as a daily feed with late, duplicate, out-of-order and corrected events; a truth test proves its business tables converge exactly to the source.
-- Modelled a star schema with an order-fulfilment accumulating snapshot, role-playing date and geography dimensions, SCD Type 2 customers and inferred members; late events and late dimension changes update only affected dates, and reruns are idempotent (\[N\] scenario tests in CI).
-- Built DataSentinel, a write-audit-publish gate on Iceberg branches that publishes cross-table-consistent releases to the serving database in one transaction; its seasonality-aware volume and drift checks caught \[N\]% of \[N\] injected anomalies with \[N\]% false alarms on held-out days, including Black Friday.
+- Built Chronos, a lakehouse (PySpark, Apache Iceberg, Airflow, PostgreSQL, Docker; designed to move to S3 and Glue) that replays \~100K real Olist marketplace orders as a daily feed with late, duplicate, out-of-order and corrected events; a truth test proves its business tables converge exactly to the source.
+- Modelled a star schema with an order-fulfilment accumulating snapshot, role-playing date and geography dimensions, SCD Type 2 customers and inferred members; late events and late dimension changes update only affected dates, and reruns are idempotent (all nine late-data scenarios tested in CI).
+- Built DataSentinel, a write-audit-publish gate on Iceberg branches that publishes cross-table-consistent releases to the serving database in one transaction; on a held-out year its checks detected 97% of 180 injected anomalies and falsely blocked 1.9% of clean days, publishing Black Friday with a warning rather than a false block.
 
 **Questions this project prepares you for, and where the answer lives**
 
@@ -707,7 +709,7 @@ Use three bullets, and replace every \[N\] with a number you measured. Don't add
 | How did you choose anomaly thresholds, and what is your false-alarm rate? | DataSentinel; Testing and evaluation |
 | Wouldn't Black Friday trigger your volume check? | DataSentinel |
 | What are the weaknesses of this project? | Known limitations |
-| What would you change at 100 times the volume? | Your Phase 4 performance numbers, and the load test if you ran it |
+| What would you change at 100 times the volume? | The local performance numbers, the AWS cost estimate in the Decision log (2026-11-25), and the load test if you ran it |
 | An address update reaches the source three days late. Does your high-water mark miss it? | Event model (source database); Orchestration, step 3; Decision log |
 | Your event ledger keeps simulated arrival times. How can it pass a truth test? | Testing and evaluation (the three-part truth test) |
 | The 10 AM file never arrives, but the 11 AM file does. How do you notice? | Event model (completion marker); DataSentinel (completeness check) |

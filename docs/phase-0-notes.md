@@ -151,8 +151,8 @@ data. Counting them as "didn't return" would drag the rate down falsely. That is
 `docs/metrics.yml`, `q5_retention`.
 
 **Why does the order review score need three tie-breakers?**
-Review creation dates have no time of day, so 156 orders have two reviews on the same latest
-date. Without a full ordering, two runs could pick different reviews and the metric would change
+Review creation dates almost never have a time of day (85 of 99,224 do), so 156 orders have
+two reviews on the same latest date. Without a full ordering, two runs could pick different reviews and the metric would change
 for no reason. `docs/metrics.yml`, `order_review_score`.
 
 **Why is Chronos's PostgreSQL separate from Airflow's?**
