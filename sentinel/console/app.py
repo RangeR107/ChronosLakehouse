@@ -4,8 +4,9 @@
     streamlit run sentinel/console/app.py
 
 Like the dashboard, it reads PostgreSQL only (the metrics store and serving), never the lake, and
-imports no pipeline code. Pick the database and namespace in the sidebar: chronos with '' is the
-main lake; chronos_eval with eval_ is the evaluation replay.
+imports no pipeline code. Pick the database and namespace in the sidebar (CHRONOS_DB_NAME sets
+the default): chronos is the Airflow lake, chronos_demo the local demo, and chronos_eval with
+eval_ the evaluation replay.
 
 Tabs: open problems (held batches, blocked releases, unfinished publishes), releases, check
 history per table, the quarantine browser, alerts and blocks, and the restatement report.
@@ -43,9 +44,10 @@ def query(dbname: str, sql: str, params: tuple = (), empty: tuple = ()) -> pd.Da
 
 
 st.sidebar.title("DataSentinel")
-db = st.sidebar.text_input("Database", "chronos")
-ns = st.sidebar.text_input("Namespace prefix", "" if db == "chronos" else "eval_")
-st.sidebar.caption("chronos + '' is the main lake; chronos_eval + eval_ is the evaluation.")
+db = st.sidebar.text_input("Database", os.environ.get("CHRONOS_DB_NAME", "chronos"))
+ns = st.sidebar.text_input("Namespace prefix", "eval_" if db == "chronos_eval" else "")
+st.sidebar.caption("chronos is the Airflow lake, chronos_demo the demo (python -m jobs.demo), "
+                   "chronos_eval with eval_ the evaluation.")
 
 try:
     releases = query(db, """SELECT business_date, release_id, status, complete, warnings,
@@ -56,7 +58,7 @@ except psycopg.Error as e:
     st.stop()
 
 served = query(db, "SELECT release_id, business_date FROM serving.load_state") \
-    if db == "chronos" or not ns else pd.DataFrame()
+    if not ns else pd.DataFrame()
 held = query(db, """SELECT business_date, run_id, ingested_at, state, reasons
                     FROM metrics.batch_holds WHERE namespace = %s ORDER BY ingested_at""", (ns,),
              empty=("business_date", "run_id", "ingested_at", "state", "reasons"))
@@ -131,9 +133,9 @@ with tabs[4]:
                               ORDER BY business_date DESC""", (ns,)), width="stretch")
 
 with tabs[5]:
-    if db == "chronos" and not ns:
+    if not ns:
         st.dataframe(query(db, "SELECT * FROM serving.restatements WHERE releases > 1 "
                                "ORDER BY abs(restatement) DESC NULLS LAST"),
                      width="stretch")
     else:
-        st.info("The restatement report is served for the main lake only.")
+        st.info("The restatement report is served for an unprefixed namespace only.")

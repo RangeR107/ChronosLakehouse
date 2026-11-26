@@ -8,6 +8,7 @@ from datetime import date
 
 import great_expectations as gx
 import psycopg
+from great_expectations.data_context.types.base import ProgressBarsConfig
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 
@@ -32,6 +33,9 @@ GOLD_GRAINS = {
 def grain_checks(df: DataFrame, table: str, grain: list[str]) -> list[Result]:
     """GX not-null on each grain column and uniqueness on the grain (Completeness and keys)."""
     context = gx.get_context(mode="ephemeral")
+    # GX draws a progress bar for every validation; in Airflow logs and the demo's output it
+    # buries the lines that matter.
+    context.variables.progress_bars = ProgressBarsConfig(globally=False)
     # persist=False matters: GX otherwise caches the DataFrame and never releases it, and Spark
     # then answers later reads of the same table from that cache, whatever branch or snapshot
     # they ask for. The next run's jobs would see this run's data and build nothing new.

@@ -46,5 +46,8 @@ def build_session(warehouse: str, app_name: str = "chronos", shuffle_partitions:
         # as written, whatever the laptop's or the Glue worker's zone is.
         .config("spark.sql.session.timeZone", "UTC")
         .config("spark.ui.enabled", "false")
+        # PySpark draws a progress bar by default. In Airflow logs and in the demo's output it
+        # buries the lines that matter (which date ran, what was published).
+        .config("spark.ui.showConsoleProgress", "false")
         .getOrCreate()
     )
